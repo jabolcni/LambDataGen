@@ -88,24 +88,22 @@ def get_latest_runs():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Simple approach: Get the most recent run for each client
+    # Show all recent completed runs (not grouped by client)
     cursor.execute("""
         SELECT r.*, c.name, c.ip
         FROM runs r 
         JOIN clients c ON r.client_id = c.client_id
-        WHERE r.id IN (
-            SELECT MAX(id) FROM runs GROUP BY client_id
-        )
+        WHERE r.games_completed > 0
         ORDER BY r.timestamp DESC
+        LIMIT 20
     """)
     
     rows = cursor.fetchall()
     conn.close()
     
-    # Debug print to console
     print(f"[SERVER DEBUG] get_latest_runs returned {len(rows)} rows:")
     for row in rows:
-        print(f"  - {row[7]}: {row[3]} games, {row[4]} positions, status: {row[5]}")
+        print(f"  - {row[7]}: {row[3]} games, {row[4]} positions, status: {row[5]}, timestamp: {row[6]}")
     
     return [{"client_id": row[1], "name": row[7], "ip": row[8], "output_file": row[2],
              "games": row[3], "positions": row[4], "status": row[5], "timestamp": row[6]} for row in rows]
