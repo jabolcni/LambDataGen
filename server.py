@@ -278,7 +278,7 @@ HTML_GUI = """
                 {% if r.output_file %}
                   <div class="btn-group btn-group-sm">
                     <a href="/download/{{ r.output_file }}" class="btn btn-success">⬇️</a>
-                    <button class="btn btn-outline-secondary copy-btn" onclick="copy('{{ r.output_file }}')">📋</button>
+                    <!-- <button class="btn btn-outline-secondary copy-btn" onclick="copy('{{ r.output_file }}')">📋</button> -->
                   </div>
                 {% else %}<em>-</em>{% endif %}
               </td>
