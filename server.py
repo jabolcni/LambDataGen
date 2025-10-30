@@ -5,6 +5,7 @@ import datetime
 import os
 import sqlite3
 from pathlib import Path
+import threading # Import threading for lock
 
 app = Flask(__name__)
 
@@ -26,7 +27,7 @@ parameters = {
     "random_10_ply": 16,
     "random_move_count": 6,
     "skipnoisy": True,
-    
+
     # Future parameters (GREYED OUT)
     "standard_start_pos_prob": 0.40,
     "frc_start_pos_prob": 0.33,
@@ -36,6 +37,12 @@ parameters = {
 }
 parameters_changed = True
 restart_required = False
+
+# === Recent Progress Tracking ===
+# List of tuples: (timestamp, client_id, positions_reported)
+# Use a lock to protect access from multiple threads
+recent_progress = []
+progress_lock = threading.Lock()
 
 # === SQLite DB ===
 def init_db():
@@ -65,16 +72,16 @@ init_db()
 
 def save_run_to_db(client_id, output_file, games, positions, status):
     print(f"[SERVER DEBUG] Saving to DB: client={client_id}, games={games}, positions={positions}, file={output_file}")
-    
+
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
+
         # Check if client exists in clients dict
         if client_id not in clients:
             print(f"[SERVER DEBUG] ERROR: Client {client_id} not found in clients dict!")
             return
-        
+
         cursor.execute("""
             INSERT OR REPLACE INTO clients (client_id, name, ip, last_seen)
             VALUES (?, ?, ?, ?)
@@ -82,7 +89,7 @@ def save_run_to_db(client_id, output_file, games, positions, status):
             client_id, clients[client_id]["name"], clients[client_id]["ip"],
             datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         ))
-        
+
         cursor.execute("""
             INSERT INTO runs (client_id, output_file, games_completed, positions_completed, status, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -90,31 +97,31 @@ def save_run_to_db(client_id, output_file, games, positions, status):
             client_id, output_file, games, positions, status,
             datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         ))
-        
+
         conn.commit()
         print(f"[SERVER DEBUG] Successfully saved to DB: {cursor.rowcount} rows affected")
         conn.close()
-        
+
     except Exception as e:
         print(f"[SERVER DEBUG] ERROR saving to DB: {e}")
 
 def get_latest_runs():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     # Get cumulative totals per client with latest status
     cursor.execute("""
-        SELECT 
+        SELECT
             c.client_id,
             c.name,
             c.ip,
             c.last_seen,
             COALESCE(SUM(r.games_completed), 0) as total_games,
             COALESCE(SUM(r.positions_completed), 0) as total_positions,
-            (SELECT r2.status FROM runs r2 
-             WHERE r2.client_id = c.client_id 
+            (SELECT r2.status FROM runs r2
+             WHERE r2.client_id = c.client_id
              ORDER BY r2.timestamp DESC LIMIT 1) as latest_status,
-            (SELECT r2.output_file FROM runs r2 
+            (SELECT r2.output_file FROM runs r2
              WHERE r2.client_id = c.client_id AND r2.output_file IS NOT NULL
              ORDER BY r2.timestamp DESC LIMIT 1) as latest_file
         FROM clients c
@@ -122,17 +129,32 @@ def get_latest_runs():
         GROUP BY c.client_id, c.name, c.ip, c.last_seen
         ORDER BY c.last_seen DESC
     """)
-    
+
     rows = cursor.fetchall()
     conn.close()
-    
+
     print(f"[SERVER DEBUG] get_latest_runs returned {len(rows)} clients:")
     for row in rows:
         print(f"  - {row[1]}: {row[4]} total games, {row[5]} total positions, status: {row[6]}")
-    
-    return [{"client_id": row[0], "name": row[1], "ip": row[2], 
+
+    return [{"client_id": row[0], "name": row[1], "ip": row[2],
              "timestamp": row[3], "games": row[4], "positions": row[5],
              "status": row[6], "output_file": row[7]} for row in rows]
+
+def get_positions_last_hour():
+    """Calculate the number of positions reported in the last hour."""
+    global recent_progress
+    now = datetime.datetime.utcnow()
+    one_hour_ago = now - datetime.timedelta(hours=1)
+
+    with progress_lock: # Acquire lock before accessing recent_progress
+        # Filter entries from the last hour
+        recent_entries = [entry for entry in recent_progress if entry[0] >= one_hour_ago]
+
+        # Calculate the total positions reported in the last hour
+        total_positions_last_hour = sum(entry[2] for entry in recent_entries)
+
+    return total_positions_last_hour
 
 # === HTML GUI (UPDATED) ===
 HTML_GUI = """
@@ -142,7 +164,7 @@ HTML_GUI = """
   <meta charset="UTF-8" />
   <title>Lamb Distributed Runner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css   " rel="stylesheet" />
   <style>
     body { background: #f8f9fa; }
     .card { margin-bottom: 1.5rem; }
@@ -265,7 +287,7 @@ HTML_GUI = """
               <th>Name</th><th>IP</th><th>Updated</th><th>Status</th><th>Games</th><th>Positions</th><th>File</th>
             </tr>
           </thead>
-          <tbody id="runs-table-body">
+          <tbody>
             {% for r in runs %}
             <tr>
               <td><strong>{{ r.name }}</strong></td>
@@ -294,7 +316,7 @@ HTML_GUI = """
 
   <!-- Stats -->
   <div class="row">
-    <div class="col-md-4">
+    <div class="col-md-3">
       <div class="card bg-primary text-white">
         <div class="card-body text-center">
           <h4>{{ runs|length }}</h4>
@@ -302,7 +324,7 @@ HTML_GUI = """
         </div>
       </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
       <div class="card bg-success text-white">
         <div class="card-body text-center">
           <h4>{{ "{:,}".format(total_games) }}</h4>
@@ -310,11 +332,20 @@ HTML_GUI = """
         </div>
       </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
       <div class="card bg-info text-white">
         <div class="card-body text-center">
           <h4>{{ "{:,}".format(total_positions) }}</h4>
           <small>Total Positions</small>
+        </div>
+      </div>
+    </div>
+    <!-- NEW Card for Positions in Last Hour -->
+    <div class="col-md-3">
+      <div class="card bg-warning text-dark">
+        <div class="card-body text-center">
+          <h4>{{ "{:,}".format(positions_last_hour) }}</h4>
+          <small>Positions in Last Hour</small>
         </div>
       </div>
     </div>
@@ -337,81 +368,6 @@ function copy(text) {
 </script>
 </body>
 </html>
-<!-- ... existing HTML ... -->
-<script>
-function copy(text) {
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = event.target;
-    const orig = btn.innerHTML;
-    btn.innerHTML = '✅';
-    setTimeout(() => btn.innerHTML = orig, 1000);
-  });
-}
-
-// Function to fetch and update live data
-function updateLiveData() {
-  fetch('/live_data') // Fetch from the new endpoint
-    .then(response => response.json())
-    .then(data => {
-      console.log("Fetched live data:", data); // Optional: for debugging
-
-      // Update Total Stats Cards
-      document.querySelector('.bg-success .card-body h4').textContent = data.total_games.toLocaleString();
-      document.querySelector('.bg-info .card-body h4').textContent = data.total_positions.toLocaleString();
-      document.querySelector('.bg-primary .card-body h4').textContent = data.runs.length; // Active Clients
-
-      // Update the Live Status Table Body
-      const tbody = document.querySelector('#runs-table-body'); // Add id="runs-table-body" to your <tbody>
-      if (tbody) {
-        let rowsHTML = '';
-        if (data.runs.length === 0) {
-          rowsHTML = '<tr><td colspan="7" class="text-center text-muted py-4">⏳ No runs yet. Start clients!</td></tr>';
-        } else {
-          data.runs.forEach(run => {
-            // Format the timestamp (last 8 chars like in original) - adjust as needed
-            const timestampDisplay = run.timestamp ? run.timestamp.slice(-8) : 'N/A';
-
-            // Build the file download button HTML
-            let fileCellHTML = '<em>-</em>';
-            if (run.output_file) {
-                 fileCellHTML = `
-                 <div class="btn-group btn-group-sm">
-                   <a href="/download/${run.output_file}" class="btn btn-success">⬇️</a>
-                 </div>
-               `;
-            }
-
-            rowsHTML += `
-            <tr>
-              <td><strong>${run.name}</strong></td>
-              <td><code>${run.ip}</code></td>
-              <td>${timestampDisplay}</td>
-              <td class="progress-text">${run.status}</td>
-              <td class="text-success fw-bold">${run.games.toLocaleString()}</td>
-              <td>${run.positions.toLocaleString()}</td>
-              <td>${fileCellHTML}</td>
-            </tr>
-            `;
-          });
-        }
-        tbody.innerHTML = rowsHTML; // Update the table body content
-      }
-
-      // Optional: Update parameter display if needed (requires modifying HTML structure to show them dynamically)
-      // Example for updating a specific parameter display element (if you have one):
-      // document.getElementById('display_games_param').textContent = data.parameters.games;
-
-    })
-    .catch(error => console.error('Error fetching live data:', error));
-}
-
-// Set up the interval to call updateLiveData every 10 seconds (10000 milliseconds)
-setInterval(updateLiveData, 10000);
-
-// Call it once on initial load to get fresh data without waiting 10s
-document.addEventListener('DOMContentLoaded', updateLiveData); 
-
-</script>
 """
 
 # === ROUTES ===
@@ -419,27 +375,29 @@ def get_total_stats():
     """Get total games and positions from all clients"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     cursor.execute("""
-        SELECT 
+        SELECT
             COALESCE(SUM(games_completed), 0) as total_games,
             COALESCE(SUM(positions_completed), 0) as total_positions
         FROM runs
     """)
-    
+
     row = cursor.fetchone()
     conn.close()
-    
+
     return row[0], row[1]  # total_games, total_positions
 
 @app.route("/")
 def index():
     runs = get_latest_runs()
     total_games, total_positions = get_total_stats()
-    
-    return render_template_string(HTML_GUI, runs=runs, params=parameters, 
-                               db_path=DB_PATH, total_games=total_games, 
-                               total_positions=total_positions)
+    positions_last_hour = get_positions_last_hour() # Calculate for display
+
+    return render_template_string(HTML_GUI, runs=runs, params=parameters,
+                               db_path=DB_PATH, total_games=total_games,
+                               total_positions=total_positions,
+                               positions_last_hour=positions_last_hour) # Pass to template
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -456,29 +414,30 @@ def register():
 @app.route("/parameters", methods=["GET"])
 def get_parameters():
     global parameters_changed, restart_required  # ADD restart_required
-    
+
     changed = parameters_changed
     should_restart = restart_required  # Check if restart is required
-    
+
     # Reset flags after reading
     parameters_changed = False
     if restart_required:
         restart_required = False  # Reset after clients read it
-    
+
     return jsonify({
-        "parameters": parameters, 
+        "parameters": parameters,
         "changed": changed,
         "restart_required": should_restart  # ADD THIS
     })
 
 @app.route("/progress", methods=["POST"])
 def progress():
+    global recent_progress # Access the global list
     data = request.get_json(silent=True) or {}
     client_id = data.get("client_id")
-    
+
     print(f"[SERVER DEBUG] Progress update from {client_id}: {data}")
     print(f"[SERVER DEBUG] Clients in memory: {list(clients.keys())}")
-    
+
     if client_id:
         # If client exists, update normally
         if client_id in clients:
@@ -493,6 +452,18 @@ def progress():
                 data.get("games", 0), data.get("positions", 0),
                 data.get("progress", "unknown")
             )
+
+            # --- ADD: Store progress for last hour calculation ---
+            positions_reported = data.get("positions", 0)
+            if positions_reported > 0: # Only store if positions were reported
+                timestamp = datetime.datetime.utcnow()
+                with progress_lock: # Acquire lock before modifying list
+                    recent_progress.append((timestamp, client_id, positions_reported))
+                    # Optional: Clean up very old entries periodically to prevent unbounded growth
+                    # Keep entries only for the last 2 hours to be safe
+                    cutoff_time = timestamp - datetime.timedelta(hours=2)
+                    recent_progress = [entry for entry in recent_progress if entry[0] >= cutoff_time]
+
         else:
             # Client ID not found - auto-re-register the client
             print(f"[SERVER DEBUG] Client {client_id} NOT found - auto-re-registering")
@@ -500,7 +471,7 @@ def progress():
             client_name = "unknown"
             if "rl_pop" in data.get("progress", ""):
                 client_name = "rl_pop"
-            
+
             clients[client_id] = {
                 "name": client_name,
                 "ip": request.remote_addr,
@@ -508,35 +479,44 @@ def progress():
                 "progress": "re-registered"
             }
             print(f"[SERVER DEBUG] Re-registered client: {client_id} as {client_name}")
-            
+
             # Now save the progress
             save_run_to_db(
                 client_id, data.get("output_file"),
                 data.get("games", 0), data.get("positions", 0),
                 data.get("progress", "unknown")
             )
-    
+
+            # --- ALSO ADD: Store progress for last hour calculation if re-registering ---
+            positions_reported = data.get("positions", 0)
+            if positions_reported > 0: # Only store if positions were reported
+                timestamp = datetime.datetime.utcnow()
+                with progress_lock: # Acquire lock before modifying list
+                    recent_progress.append((timestamp, client_id, positions_reported))
+                    cutoff_time = timestamp - datetime.timedelta(hours=2)
+                    recent_progress = [entry for entry in recent_progress if entry[0] >= cutoff_time]
+
     return jsonify({"status": "ok"})
 
 @app.route("/set_parameters", methods=["POST"])
 def set_parameters():
     global parameters, parameters_changed
     form = request.form
-    
+
     # Update only active parameters
     active_params = {
         "games", "depth", "save_min_ply", "save_max_ply",
         "random_min_ply", "random_50_ply", "random_10_ply", "random_move_count"
     }
-    
+
     for key in active_params:
         if key in form:
             val = form[key].strip()
             parameters[key] = int(val)
-    
+
     if "skipnoisy" in form:
         parameters["skipnoisy"] = form["skipnoisy"] == "true"
-    
+
     parameters_changed = True
     # NO restart_required = True - clients will pick up new params naturally
     return index()
@@ -558,38 +538,38 @@ def download(filename):
 def debug_db_status():
     import os
     result = "<h1>Database Status</h1>"
-    
+
     # Check if DB file exists
     db_exists = os.path.exists(DB_PATH)
     result += f"<p>DB file exists: {db_exists}</p>"
-    
+
     if db_exists:
         # Check file size and permissions
         size = os.path.getsize(DB_PATH)
         result += f"<p>DB file size: {size} bytes</p>"
-        
+
         # Try to connect and count rows
         try:
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
-            
+
             # Count clients
             cursor.execute("SELECT COUNT(*) FROM clients")
             client_count = cursor.fetchone()[0]
-            
+
             # Count runs
             cursor.execute("SELECT COUNT(*) FROM runs")
             run_count = cursor.fetchone()[0]
-            
+
             result += f"<p>Clients in DB: {client_count}</p>"
             result += f"<p>Runs in DB: {run_count}</p>"
-            
+
             conn.close()
         except Exception as e:
             result += f"<p>Error accessing DB: {e}</p>"
     else:
         result += f"<p>DB file not found at: {DB_PATH}</p>"
-    
+
     return result
 
 @app.route("/debug_db")
@@ -599,7 +579,7 @@ def debug_db():
     cursor.execute("SELECT * FROM runs ORDER BY timestamp DESC LIMIT 10")
     rows = cursor.fetchall()
     conn.close()
-    
+
     result = "<h1>Latest Runs</h1><table border=1>"
     result += "<tr><th>ID</th><th>Client ID</th><th>File</th><th>Games</th><th>Positions</th><th>Status</th><th>Timestamp</th></tr>"
     for row in rows:
@@ -611,17 +591,17 @@ def debug_db():
 def debug_db_full():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     # Check all recent runs
     cursor.execute("SELECT * FROM runs ORDER BY timestamp DESC LIMIT 20")
     rows = cursor.fetchall()
-    
+
     result = "<h1>All Recent Runs in DB</h1><table border=1>"
     result += "<tr><th>ID</th><th>Client ID</th><th>File</th><th>Games</th><th>Positions</th><th>Status</th><th>Timestamp</th></tr>"
     for row in rows:
         result += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td></tr>"
     result += "</table>"
-    
+
     conn.close()
     return result
 
@@ -643,20 +623,6 @@ def debug_clients():
         result += f"<tr><td>{client_id}</td><td>{client_data['name']}</td><td>{client_data['ip']}</td><td>{client_data['last_seen']}</td><td>{client_data['progress']}</td></tr>"
     result += "</table>"
     return result
-
-@app.route("/live_data") # Add this new route
-def live_data():
-    runs = get_latest_runs()
-    total_games, total_positions = get_total_stats()
-    # Include the current parameters as well, maybe only the ones you want to display
-    current_params = parameters # You might want a subset or formatted version
-    return jsonify({
-        "runs": runs,
-        "total_games": total_games,
-        "total_positions": total_positions,
-        "parameters": current_params, # Include if you want to update param display too
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() # Optional: to see the update time
-    })
 
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
