@@ -156,7 +156,7 @@ def get_positions_last_hour():
 
     return total_positions_last_hour
 
-# === HTML GUI (UPDATED) ===
+# === HTML GUI (UPDATED with auto-refresh and 4th field) ===
 HTML_GUI = """
 <!doctype html>
 <html lang="en">
@@ -164,7 +164,7 @@ HTML_GUI = """
   <meta charset="UTF-8" />
   <title>Lamb Distributed Runner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css   " rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css  " rel="stylesheet" />
   <style>
     body { background: #f8f9fa; }
     .card { margin-bottom: 1.5rem; }
@@ -287,7 +287,7 @@ HTML_GUI = """
               <th>Name</th><th>IP</th><th>Updated</th><th>Status</th><th>Games</th><th>Positions</th><th>File</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="runs-table-body">
             {% for r in runs %}
             <tr>
               <td><strong>{{ r.name }}</strong></td>
@@ -365,6 +365,72 @@ function copy(text) {
     setTimeout(() => btn.innerHTML = orig, 1000);
   });
 }
+
+// Function to fetch and update live data
+function updateLiveData() {
+  fetch('/live_data') // Fetch from the new endpoint
+    .then(response => response.json())
+    .then(data => {
+      console.log("Fetched live data:", data); // Optional: for debugging
+
+      // Update Total Stats Cards
+      document.querySelector('.bg-success .card-body h4').textContent = data.total_games.toLocaleString();
+      document.querySelector('.bg-info .card-body h4').textContent = data.total_positions.toLocaleString();
+      document.querySelector('.bg-primary .card-body h4').textContent = data.runs.length; // Active Clients
+      // Update NEW card for Positions Last Hour
+      document.querySelector('.bg-warning .card-body h4').textContent = data.positions_last_hour.toLocaleString();
+
+      // Update the Live Status Table Body
+      const tbody = document.querySelector('#runs-table-body'); // Add id="runs-table-body" to your <tbody>
+      if (tbody) {
+        let rowsHTML = '';
+        if (data.runs.length === 0) {
+          rowsHTML = '<tr><td colspan="7" class="text-center text-muted py-4">⏳ No runs yet. Start clients!</td></tr>';
+        } else {
+          data.runs.forEach(run => {
+            // Format the timestamp (last 8 chars like in original) - adjust as needed
+            const timestampDisplay = run.timestamp ? run.timestamp.slice(-8) : 'N/A';
+
+            // Build the file download button HTML
+            let fileCellHTML = '<em>-</em>';
+            if (run.output_file) {
+                 fileCellHTML = `
+                 <div class="btn-group btn-group-sm">
+                   <a href="/download/${run.output_file}" class="btn btn-success">⬇️</a>
+                 </div>
+               `;
+            }
+
+            rowsHTML += `
+            <tr>
+              <td><strong>${run.name}</strong></td>
+              <td><code>${run.ip}</code></td>
+              <td>${timestampDisplay}</td>
+              <td class="progress-text">${run.status}</td>
+              <td class="text-success fw-bold">${run.games.toLocaleString()}</td>
+              <td>${run.positions.toLocaleString()}</td>
+              <td>${fileCellHTML}</td>
+            </tr>
+            `;
+          });
+        }
+        tbody.innerHTML = rowsHTML; // Update the table body content
+      }
+
+      // Optional: Update parameter display if needed (requires modifying HTML structure to show them dynamically)
+      // Example for updating a specific parameter display element (if you have one):
+      // document.getElementById('display_games_param').textContent = data.parameters.games;
+
+    })
+    .catch(error => console.error('Error fetching live data:', error));
+}
+
+// Set up the interval to call updateLiveData every 10 seconds (10000 milliseconds)
+setInterval(updateLiveData, 10000);
+
+// Call it once on initial load to get fresh data without waiting 10s
+document.addEventListener('DOMContentLoaded', updateLiveData);
+
 </script>
 </body>
 </html>
@@ -623,6 +689,22 @@ def debug_clients():
         result += f"<tr><td>{client_id}</td><td>{client_data['name']}</td><td>{client_data['ip']}</td><td>{client_data['last_seen']}</td><td>{client_data['progress']}</td></tr>"
     result += "</table>"
     return result
+
+@app.route("/live_data") # Add this new route
+def live_data():
+    runs = get_latest_runs()
+    total_games, total_positions = get_total_stats()
+    positions_last_hour = get_positions_last_hour() # Calculate for live data endpoint
+    # Include the current parameters as well, maybe only the ones you want to display
+    current_params = parameters # You might want a subset or formatted version
+    return jsonify({
+        "runs": runs,
+        "total_games": total_games,
+        "total_positions": total_positions,
+        "positions_last_hour": positions_last_hour, # Include the new metric
+        "parameters": current_params, # Include if you want to update param display too
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() # Optional: to see the update time
+    })
 
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
