@@ -63,6 +63,8 @@ def init_db():
 init_db()
 
 def save_run_to_db(client_id, output_file, games, positions, status):
+    print(f"[SERVER DEBUG] Saving to DB: client={client_id}, games={games}, positions={positions}, file={output_file}")  # ADD THIS
+    
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -330,6 +332,9 @@ def get_parameters():
 def progress():
     data = request.get_json(silent=True) or {}
     client_id = data.get("client_id")
+    
+    print(f"[SERVER DEBUG] Progress update from {client_id}: {data}")  # ADD THIS
+    
     if client_id and client_id in clients:
         clients[client_id].update({
             "progress": data.get("progress", "unknown"),
@@ -377,6 +382,21 @@ def upload():
 @app.route("/download/<filename>")
 def download(filename):
     return send_from_directory(GAMES_DIR, filename, as_attachment=True)
+
+@app.route("/debug_db")
+def debug_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM runs ORDER BY timestamp DESC LIMIT 10")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    result = "<h1>Latest Runs</h1><table border=1>"
+    result += "<tr><th>ID</th><th>Client ID</th><th>File</th><th>Games</th><th>Positions</th><th>Status</th><th>Timestamp</th></tr>"
+    for row in rows:
+        result += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td></tr>"
+    result += "</table>"
+    return result
 
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
