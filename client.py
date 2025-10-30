@@ -110,21 +110,27 @@ def run_one_batch(params, cid):
         "random_50_ply", str(params["random_50_ply"]),
         "random_10_ply", str(params["random_10_ply"]),
         "random_move_count", str(params["random_move_count"]),
-        str(output_path)
+        "filename", str(output_path)
     ]
     if params["skipnoisy"]:
         cmd.append("skipnoisy")
 
+    print(f"[DEBUG] Running command: {' '.join(cmd)}")  # ADD THIS LINE
+    
     report_progress(cid, f"starting → {output_file}")
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        print(f"[DEBUG] lamb stdout: {result.stdout}")  # ADD THIS LINE
+        print(f"[DEBUG] lamb stderr: {result.stderr}")  # ADD THIS LINE
         games, positions = parse_lamb_output(result.stdout)
         report_progress(cid, f"finished → {games} games, {positions} pos", games, positions, output_file)
         upload_file_to_server(output_path)
     except subprocess.CalledProcessError as e:
         error = f"lamb failed: {e.returncode}\n{e.stderr[-200:]}"
+        print(f"[DEBUG] lamb error: {error}")  # ADD THIS LINE
         report_progress(cid, error, 0, 0, output_file)
     except Exception as e:
+        print(f"[DEBUG] Exception: {e}")  # ADD THIS LINE
         report_progress(cid, f"error: {e}", 0, 0, output_file)
 
 # === Worker for multiprocessing ===
