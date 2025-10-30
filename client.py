@@ -76,26 +76,48 @@ def report_progress(cid, message, games=0, positions=0, output_file=None):
 # === Parse lamb Output ===
 def parse_lamb_output(stdout):
     try:
-        # Try multiple patterns
-        patterns = [
-            r"games=(\d+) positions=(\d+)",
-            r"Generated (\d+) games?, (\d+) positions?",
-            r"games: (\d+), positions: (\d+)"
-        ]
+        lines = stdout.split('\n')
         
-        for pattern in patterns:
-            m = re.search(pattern, stdout)
-            if m:
+        # Priority 1: Look for final summary line
+        summary_line = None
+        for line in lines:
+            if "datagen summary" in line:
+                summary_line = line
+                break
+        
+        # Priority 2: If no summary, use the last progress line
+        if not summary_line:
+            progress_lines = [line for line in lines if "datagen progress" in line]
+            if progress_lines:
+                summary_line = progress_lines[-1]  # Last progress line
+        
+        # Priority 3: If still nothing, use any line with games/positions
+        if not summary_line:
+            for line in lines:
+                if "games=" in line and "positions=" in line:
+                    summary_line = line
+                    break
+        
+        if summary_line:
+            print(f"[DEBUG] Using line for parsing: {summary_line.strip()}")
+            
+            # Extract games and positions
+            m = re.search(r"games=(\d+)", summary_line)
+            n = re.search(r"positions=(\d+)", summary_line)
+            
+            if m and n:
                 games = int(m.group(1))
-                positions = int(m.group(2))
-                print(f"[DEBUG] Parsed: {games} games, {positions} positions")  # Debug
+                positions = int(n.group(1))
+                print(f"[DEBUG] Successfully parsed: {games} games, {positions} positions")
                 return games, positions
         
-        print(f"[DEBUG] No match found in output: {stdout[:200]}...")  # Debug
+        print(f"[DEBUG] Could not parse games/positions from output")
+        print(f"[DEBUG] Output sample: {stdout[:300]}...")
         return 0, 0
         
     except Exception as e:
         print(f"[DEBUG] Parse error: {e}")
+        print(f"[DEBUG] Output that caused error: {stdout[:500]}")
         return 0, 0
 
 # === Upload File to Server ===
