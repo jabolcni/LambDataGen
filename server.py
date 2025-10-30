@@ -17,7 +17,7 @@ Path(GAMES_DIR).mkdir(parents=True, exist_ok=True)
 clients = {}
 parameters = {
     # Core parameters (ACTIVE)
-    "games": 1000,
+    "games": 10,
     "depth": 9,
     "save_min_ply": 3,
     "save_max_ply": 400,
@@ -63,26 +63,39 @@ def init_db():
 init_db()
 
 def save_run_to_db(client_id, output_file, games, positions, status):
-    print(f"[SERVER DEBUG] Saving to DB: client={client_id}, games={games}, positions={positions}, file={output_file}")  # ADD THIS
+    print(f"[SERVER DEBUG] Saving to DB: client={client_id}, games={games}, positions={positions}, file={output_file}")
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT OR REPLACE INTO clients (client_id, name, ip, last_seen)
-        VALUES (?, ?, ?, ?)
-    """, (
-        client_id, clients[client_id]["name"], clients[client_id]["ip"],
-        datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    ))
-    cursor.execute("""
-        INSERT INTO runs (client_id, output_file, games_completed, positions_completed, status, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        client_id, output_file, games, positions, status,
-        datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    ))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Check if client exists in clients dict
+        if client_id not in clients:
+            print(f"[SERVER DEBUG] ERROR: Client {client_id} not found in clients dict!")
+            return
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO clients (client_id, name, ip, last_seen)
+            VALUES (?, ?, ?, ?)
+        """, (
+            client_id, clients[client_id]["name"], clients[client_id]["ip"],
+            datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        ))
+        
+        cursor.execute("""
+            INSERT INTO runs (client_id, output_file, games_completed, positions_completed, status, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            client_id, output_file, games, positions, status,
+            datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        ))
+        
+        conn.commit()
+        print(f"[SERVER DEBUG] Successfully saved to DB: {cursor.rowcount} rows affected")
+        conn.close()
+        
+    except Exception as e:
+        print(f"[SERVER DEBUG] ERROR saving to DB: {e}")
 
 def get_latest_runs():
     conn = sqlite3.connect(DB_PATH)
@@ -141,7 +154,7 @@ HTML_GUI = """
           <div class="col-md-2">
             <label class="form-label">games</label>
             <input name="games" class="form-control" value="{{ params.games }}" required>
-            <div class="form-text">1000</div>
+            <div class="form-text">10</div>
           </div>
           <div class="col-md-2">
             <label class="form-label">depth</label>
@@ -391,6 +404,44 @@ def upload():
 @app.route("/download/<filename>")
 def download(filename):
     return send_from_directory(GAMES_DIR, filename, as_attachment=True)
+
+@app.route("/debug_db_status")
+def debug_db_status():
+    import os
+    result = "<h1>Database Status</h1>"
+    
+    # Check if DB file exists
+    db_exists = os.path.exists(DB_PATH)
+    result += f"<p>DB file exists: {db_exists}</p>"
+    
+    if db_exists:
+        # Check file size and permissions
+        size = os.path.getsize(DB_PATH)
+        result += f"<p>DB file size: {size} bytes</p>"
+        
+        # Try to connect and count rows
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            
+            # Count clients
+            cursor.execute("SELECT COUNT(*) FROM clients")
+            client_count = cursor.fetchone()[0]
+            
+            # Count runs
+            cursor.execute("SELECT COUNT(*) FROM runs")
+            run_count = cursor.fetchone()[0]
+            
+            result += f"<p>Clients in DB: {client_count}</p>"
+            result += f"<p>Runs in DB: {run_count}</p>"
+            
+            conn.close()
+        except Exception as e:
+            result += f"<p>Error accessing DB: {e}</p>"
+    else:
+        result += f"<p>DB file not found at: {DB_PATH}</p>"
+    
+    return result
 
 @app.route("/debug_db")
 def debug_db():
