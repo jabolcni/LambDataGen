@@ -179,12 +179,21 @@ def run_one_batch(params, cid):
         report_progress(cid, f"error: {e}", 0, 0, output_file)
 
 # === Worker for multiprocessing ===
-def worker_task(params, cid):
-    """Run batches indefinitely"""
+def worker_task(current_params, cid):
+    """Run batches indefinitely, checking for new parameters each time"""
     while True:
         try:
+            # Get latest parameters for this batch
+            params, changed, restart_required = fetch_parameters()
+            if params is None:
+                # If fetch failed, use the current params
+                params = current_params
+            else:
+                # Update our current params
+                current_params = params.copy()
+            
             run_one_batch(params, cid)
-            time.sleep(1)  # Avoid CPU spin
+            time.sleep(1)  # Brief pause between batches
         except Exception as e:
             report_progress(cid, f"worker crash: {e}")
             time.sleep(5)
@@ -193,7 +202,7 @@ def worker_task(params, cid):
 def main():
     print(f"[*] Lamb Client [{COMP_NAME}] starting | Concurrency: {CONCURRENCY}")
     cid = get_client_id()
-    last_params = None
+    current_params = None
     pool = None
 
     while True:
@@ -202,38 +211,31 @@ def main():
             time.sleep(POLL_INTERVAL)
             continue
 
-        # Restart workers if needed
-        if changed or restart_required or last_params != params:
-            # Close old pool
-            if pool is not None:
-                print("[+] Terminating old worker pool")
-                pool.terminate()
-                pool.join()
-                pool = None
-                time.sleep(1)
-
-            print(f"[+] Starting new worker pool with {CONCURRENCY} workers")
-            if restart_required:
-                report_progress(cid, f"server restart → {CONCURRENCY} workers")
-            else:
-                report_progress(cid, f"parameters changed → {CONCURRENCY} workers")
+        # If no workers running, start them with current parameters
+        if pool is None:
+            print(f"[+] Starting {CONCURRENCY} workers with {params['games']} games")
+            report_progress(cid, f"starting {CONCURRENCY} workers")
+            current_params = params.copy()
             
-            last_params = params.copy()
-
-            # Start new pool
             try:
                 pool = multiprocessing.Pool(processes=CONCURRENCY)
-                # Start workers - they'll run indefinitely in worker_task
                 for i in range(CONCURRENCY):
-                    pool.apply_async(worker_task, (params, cid))
-                print(f"[DEBUG] Started {CONCURRENCY} workers in pool")
-                
+                    pool.apply_async(worker_task, (current_params, cid))
+                print(f"[DEBUG] Started {CONCURRENCY} workers")
             except Exception as e:
-                print(f"[!] Error starting worker pool: {e}")
-                report_progress(cid, f"pool start error: {e}")
+                print(f"[!] Error starting workers: {e}")
+                report_progress(cid, f"start error: {e}")
+                pool = None
+
+        # If parameters changed but we have running workers, just update for next run
+        elif changed and current_params != params:
+            print(f"[+] Parameters updated: {params['games']} games (will use after current batches)")
+            report_progress(cid, f"parameters updated → {params['games']} games next")
+            current_params = params.copy()
 
         else:
-            report_progress(cid, "running")
+            # Normal operation - workers are running
+            report_progress(cid, f"running {CONCURRENCY} workers")
 
         time.sleep(POLL_INTERVAL)
 

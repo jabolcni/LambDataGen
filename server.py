@@ -245,7 +245,7 @@ HTML_GUI = """
           </div>
         </div>
         <div class="mt-3">
-          <button class="btn btn-primary btn-lg">🚀 Update & Restart All Clients</button>
+          <button class="btn btn-primary btn-lg">🚀 Update Parameters (Apply on Next Run)</button>
         </div>
       </form>
     </div>
@@ -442,7 +442,7 @@ def set_parameters():
         parameters["skipnoisy"] = form["skipnoisy"] == "true"
     
     parameters_changed = True
-    restart_required = True
+    # NO restart_required = True - clients will pick up new params naturally
     return index()
 
 @app.route("/upload", methods=["POST"])
