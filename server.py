@@ -356,24 +356,44 @@ def progress():
     client_id = data.get("client_id")
     
     print(f"[SERVER DEBUG] Progress update from {client_id}: {data}")
-    
-    # DEBUG: Check if client exists
     print(f"[SERVER DEBUG] Clients in memory: {list(clients.keys())}")
     
-    if client_id and client_id in clients:
-        print(f"[SERVER DEBUG] Client {client_id} found in clients dict")
-        clients[client_id].update({
-            "progress": data.get("progress", "unknown"),
-            "output_file": data.get("output_file"),
-            "last_seen": datetime.datetime.utcnow().strftime("%H:%M:%S")
-        })
-        save_run_to_db(
-            client_id, data.get("output_file"),
-            data.get("games", 0), data.get("positions", 0),
-            data.get("progress", "unknown")
-        )
-    else:
-        print(f"[SERVER DEBUG] ERROR: Client {client_id} NOT found in clients dict!")
+    if client_id:
+        # If client exists, update normally
+        if client_id in clients:
+            print(f"[SERVER DEBUG] Client {client_id} found in clients dict")
+            clients[client_id].update({
+                "progress": data.get("progress", "unknown"),
+                "output_file": data.get("output_file"),
+                "last_seen": datetime.datetime.utcnow().strftime("%H:%M:%S")
+            })
+            save_run_to_db(
+                client_id, data.get("output_file"),
+                data.get("games", 0), data.get("positions", 0),
+                data.get("progress", "unknown")
+            )
+        else:
+            # Client ID not found - auto-re-register the client
+            print(f"[SERVER DEBUG] Client {client_id} NOT found - auto-re-registering")
+            # Extract client name from progress message or use default
+            client_name = "unknown"
+            if "rl_pop" in data.get("progress", ""):
+                client_name = "rl_pop"
+            
+            clients[client_id] = {
+                "name": client_name,
+                "ip": request.remote_addr,
+                "last_seen": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                "progress": "re-registered"
+            }
+            print(f"[SERVER DEBUG] Re-registered client: {client_id} as {client_name}")
+            
+            # Now save the progress
+            save_run_to_db(
+                client_id, data.get("output_file"),
+                data.get("games", 0), data.get("positions", 0),
+                data.get("progress", "unknown")
+            )
     
     return jsonify({"status": "ok"})
 
