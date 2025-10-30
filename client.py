@@ -12,6 +12,8 @@ import string
 import os
 import re
 from pathlib import Path
+import shutil
+from pathlib import Path
 
 # === CLI Arguments ===
 parser = argparse.ArgumentParser(description="Lamb Distributed Client")
@@ -220,12 +222,67 @@ def worker_task(current_params, cid):
             report_progress(cid, f"worker crash: {e}")
             time.sleep(5)
 
+def cleanup_old_files(folder_path="data", max_size_gb=4, min_size_gb=2):
+    """
+    Remove oldest files when folder exceeds max_size_gb, 
+    but keep at least min_size_gb of data
+    """
+    try:
+        folder = Path(folder_path)
+        if not folder.exists():
+            return
+        
+        # Get all .bin files with their modification times
+        bin_files = [(f, f.stat().st_mtime) for f in folder.glob("*.bin")]
+        
+        if not bin_files:
+            return
+        
+        # Calculate current folder size
+        total_size = sum(f.stat().st_size for f, _ in bin_files)
+        max_size_bytes = max_size_gb * 1024 * 1024 * 1024  # Convert GB to bytes
+        min_size_bytes = min_size_gb * 1024 * 1024 * 1024  # Convert GB to bytes
+        
+        print(f"[CLEANUP] Current folder size: {total_size / (1024**3):.2f}GB")
+        
+        # If under max size, do nothing
+        if total_size <= max_size_bytes:
+            return
+        
+        # Sort files by modification time (oldest first)
+        bin_files.sort(key=lambda x: x[1])
+        
+        # Remove oldest files until we're below min size
+        removed_count = 0
+        removed_size = 0
+        
+        for file_path, _ in bin_files:
+            if total_size - removed_size <= min_size_bytes:
+                break
+                
+            file_size = file_path.stat().st_size
+            try:
+                file_path.unlink()  # Delete the file
+                removed_count += 1
+                removed_size += file_size
+                print(f"[CLEANUP] Removed old file: {file_path.name} ({file_size / (1024**2):.1f}MB)")
+            except Exception as e:
+                print(f"[CLEANUP] Error removing {file_path.name}: {e}")
+        
+        if removed_count > 0:
+            print(f"[CLEANUP] Removed {removed_count} files, freed {removed_size / (1024**3):.2f}GB")
+            print(f"[CLEANUP] New folder size: {(total_size - removed_size) / (1024**3):.2f}GB")
+            
+    except Exception as e:
+        print(f"[CLEANUP] Error during cleanup: {e}")
+
 # === Main Loop ===
 def main():
     print(f"[*] Lamb Client [{COMP_NAME}] starting | Concurrency: {CONCURRENCY}")
     cid = get_client_id()
     current_params = None
     pool = None
+    cleanup_counter = 0
 
     while True:
         params, changed, restart_required = fetch_parameters()
@@ -258,6 +315,12 @@ def main():
         else:
             # Normal operation - workers are running
             report_progress(cid, f"running {CONCURRENCY} workers")
+
+        # Run cleanup every N iterations
+        cleanup_counter += 1
+        if cleanup_counter >= (24*60*60/POLL_INTERVAL):
+            cleanup_old_files()
+            cleanup_counter = 0        
 
         time.sleep(POLL_INTERVAL)
 
