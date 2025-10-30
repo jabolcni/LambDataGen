@@ -101,24 +101,37 @@ def get_latest_runs():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Show all recent runs (remove the games_completed filter)
+    # Get cumulative totals per client with latest status
     cursor.execute("""
-        SELECT r.*, c.name, c.ip
-        FROM runs r 
-        JOIN clients c ON r.client_id = c.client_id
-        ORDER BY r.timestamp DESC
-        LIMIT 20
+        SELECT 
+            c.client_id,
+            c.name,
+            c.ip,
+            c.last_seen,
+            COALESCE(SUM(r.games_completed), 0) as total_games,
+            COALESCE(SUM(r.positions_completed), 0) as total_positions,
+            (SELECT r2.status FROM runs r2 
+             WHERE r2.client_id = c.client_id 
+             ORDER BY r2.timestamp DESC LIMIT 1) as latest_status,
+            (SELECT r2.output_file FROM runs r2 
+             WHERE r2.client_id = c.client_id AND r2.output_file IS NOT NULL
+             ORDER BY r2.timestamp DESC LIMIT 1) as latest_file
+        FROM clients c
+        LEFT JOIN runs r ON c.client_id = r.client_id
+        GROUP BY c.client_id, c.name, c.ip, c.last_seen
+        ORDER BY c.last_seen DESC
     """)
     
     rows = cursor.fetchall()
     conn.close()
     
-    print(f"[SERVER DEBUG] get_latest_runs returned {len(rows)} rows:")
+    print(f"[SERVER DEBUG] get_latest_runs returned {len(rows)} clients:")
     for row in rows:
-        print(f"  - {row[7]}: {row[3]} games, {row[4]} positions, status: {row[5]}, timestamp: {row[6]}")
+        print(f"  - {row[1]}: {row[4]} total games, {row[5]} total positions, status: {row[6]}")
     
-    return [{"client_id": row[1], "name": row[7], "ip": row[8], "output_file": row[2],
-             "games": row[3], "positions": row[4], "status": row[5], "timestamp": row[6]} for row in rows]
+    return [{"client_id": row[0], "name": row[1], "ip": row[2], 
+             "timestamp": row[3], "games": row[4], "positions": row[5],
+             "status": row[6], "output_file": row[7]} for row in rows]
 
 # === HTML GUI (UPDATED) ===
 HTML_GUI = """
