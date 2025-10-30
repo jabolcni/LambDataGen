@@ -47,9 +47,11 @@ def fetch_parameters():
         r = requests.get(f"{SERVER_URL}/parameters", timeout=5)
         r.raise_for_status()
         data = r.json()
-        return data["parameters"], data["changed"]
+        # Return 3 values: parameters, changed, restart_required
+        return data["parameters"], data["changed"], data.get("restart_required", False)
     except Exception as e:
         print(f"[!] Param fetch error: {e}")
+        # Return 3 values even on error
         return None, False, False
 
 # === Report Progress (with games/positions) ===
