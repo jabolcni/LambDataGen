@@ -355,9 +355,13 @@ def progress():
     data = request.get_json(silent=True) or {}
     client_id = data.get("client_id")
     
-    print(f"[SERVER DEBUG] Progress update from {client_id}: {data}")  # ADD THIS
+    print(f"[SERVER DEBUG] Progress update from {client_id}: {data}")
+    
+    # DEBUG: Check if client exists
+    print(f"[SERVER DEBUG] Clients in memory: {list(clients.keys())}")
     
     if client_id and client_id in clients:
+        print(f"[SERVER DEBUG] Client {client_id} found in clients dict")
         clients[client_id].update({
             "progress": data.get("progress", "unknown"),
             "output_file": data.get("output_file"),
@@ -368,6 +372,9 @@ def progress():
             data.get("games", 0), data.get("positions", 0),
             data.get("progress", "unknown")
         )
+    else:
+        print(f"[SERVER DEBUG] ERROR: Client {client_id} NOT found in clients dict!")
+    
     return jsonify({"status": "ok"})
 
 @app.route("/set_parameters", methods=["POST"])
@@ -483,6 +490,15 @@ def debug_runs():
     result += "<tr><th>Name</th><th>Games</th><th>Positions</th><th>Status</th><th>File</th></tr>"
     for r in runs:
         result += f"<tr><td>{r['name']}</td><td>{r['games']}</td><td>{r['positions']}</td><td>{r['status']}</td><td>{r['output_file']}</td></tr>"
+    result += "</table>"
+    return result
+
+@app.route("/debug_clients")
+def debug_clients():
+    result = "<h1>Clients in Memory</h1><table border=1>"
+    result += "<tr><th>Client ID</th><th>Name</th><th>IP</th><th>Last Seen</th><th>Progress</th></tr>"
+    for client_id, client_data in clients.items():
+        result += f"<tr><td>{client_id}</td><td>{client_data['name']}</td><td>{client_data['ip']}</td><td>{client_data['last_seen']}</td><td>{client_data['progress']}</td></tr>"
     result += "</table>"
     return result
 
