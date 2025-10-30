@@ -305,7 +305,7 @@ HTML_GUI = """
     <div class="col-md-4">
       <div class="card bg-success text-white">
         <div class="card-body text-center">
-          <h4>{% set total_games=0 %}{% for r in runs %}{% set total_games=total_games+r.games %}{% endfor %}{{ "{:,}".format(total_games) }}</h4>
+          <h4>{{ "{:,}".format(total_games) }}</h4>
           <small>Total Games</small>
         </div>
       </div>
@@ -313,7 +313,7 @@ HTML_GUI = """
     <div class="col-md-4">
       <div class="card bg-info text-white">
         <div class="card-body text-center">
-          <h4>{% set total_pos=0 %}{% for r in runs %}{% set total_pos=total_pos+r.positions %}{% endfor %}{{ "{:,}".format(total_pos) }}</h4>
+          <h4>{{ "{:,}".format(total_positions) }}</h4>
           <small>Total Positions</small>
         </div>
       </div>
@@ -340,10 +340,31 @@ function copy(text) {
 """
 
 # === ROUTES ===
+def get_total_stats():
+    """Get total games and positions from all clients"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 
+            COALESCE(SUM(games_completed), 0) as total_games,
+            COALESCE(SUM(positions_completed), 0) as total_positions
+        FROM runs
+    """)
+    
+    row = cursor.fetchone()
+    conn.close()
+    
+    return row[0], row[1]  # total_games, total_positions
+
 @app.route("/")
 def index():
     runs = get_latest_runs()
-    return render_template_string(HTML_GUI, runs=runs, params=parameters, db_path=DB_PATH)
+    total_games, total_positions = get_total_stats()
+    
+    return render_template_string(HTML_GUI, runs=runs, params=parameters, 
+                               db_path=DB_PATH, total_games=total_games, 
+                               total_positions=total_positions)
 
 @app.route("/register", methods=["POST"])
 def register():
