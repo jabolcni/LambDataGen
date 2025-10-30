@@ -194,48 +194,63 @@ def main():
     print(f"[*] Lamb Client [{COMP_NAME}] starting | Concurrency: {CONCURRENCY}")
     cid = get_client_id()
     last_params = None
+    current_processes = []  # Track current worker processes
 
     while True:
-        params, changed, restart_required = fetch_parameters()  # CHANGED THIS LINE
+        params, changed, restart_required = fetch_parameters()
         if params is None:
             time.sleep(POLL_INTERVAL)
             continue
 
         # Restart workers if params changed OR restart required
-        if changed or restart_required or last_params != params:  # CHANGED THIS LINE
-            if restart_required:  # CHANGED THIS LINE
-                print(f"[+] Server requested restart → restarting {CONCURRENCY} workers")
+        if changed or restart_required or last_params != params:
+            # TERMINATE OLD PROCESSES FIRST
+            if current_processes:
+                print(f"[+] Terminating {len(current_processes)} old workers")
+                for p in current_processes:
+                    p.terminate()  # Send SIGTERM
+                    p.join(timeout=5)  # Wait up to 5 seconds
+                    if p.is_alive():
+                        print(f"[!] Process {p.pid} still alive, forcing kill")
+                        p.kill()  # Force kill if still alive
+                current_processes = []
+                time.sleep(1)  # Brief pause to ensure cleanup
+
+            print(f"[+] Starting {CONCURRENCY} new workers")
+            if restart_required:
                 report_progress(cid, f"server restart → {CONCURRENCY} workers")
             else:
-                print(f"[+] Parameters changed → restarting {CONCURRENCY} workers")
                 report_progress(cid, f"parameters changed → {CONCURRENCY} workers")
             
             last_params = params.copy()
 
-            # Kill old pool and start new
+            # Start new processes
             try:
-                # Use a simpler approach - create processes directly
-                processes = []
+                current_processes = []
                 for i in range(CONCURRENCY):
                     p = multiprocessing.Process(target=worker_task, args=(params, cid))
                     p.daemon = True
                     p.start()
-                    processes.append(p)
-                    print(f"[DEBUG] Started worker process {i+1}")
+                    current_processes.append(p)
+                    print(f"[DEBUG] Started worker process {i+1} (PID: {p.pid})")
                 
-                # Wait a bit to see if processes start
+                # Check if processes started successfully
                 time.sleep(2)
-                
-                # Check if processes are still alive
-                alive_count = sum(1 for p in processes if p.is_alive())
-                print(f"[DEBUG] {alive_count}/{CONCURRENCY} workers alive")
+                alive_count = sum(1 for p in current_processes if p.is_alive())
+                print(f"[DEBUG] {alive_count}/{CONCURRENCY} workers running")
                 
             except Exception as e:
                 print(f"[!] Error starting workers: {e}")
                 report_progress(cid, f"worker start error: {e}")
 
         else:
-            report_progress(cid, "waiting for parameter change")
+            # Clean up any dead processes and report status
+            current_processes = [p for p in current_processes if p.is_alive()]
+            alive_count = len(current_processes)
+            if alive_count < CONCURRENCY:
+                print(f"[!] Only {alive_count}/{CONCURRENCY} workers alive, will restart on next cycle")
+            
+            report_progress(cid, f"running → {alive_count}/{CONCURRENCY} workers")
 
         time.sleep(POLL_INTERVAL)
 
