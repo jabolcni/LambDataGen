@@ -120,7 +120,7 @@ def upload_file_to_server(file_path):
 def make_output_filename():
     now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     uniq = ''.join(random.choices(string.ascii_uppercase, k=4))
-    return f"data_{now}_{COMP_NAME}_{uniq}"
+    return f"data_{now}_{COMP_NAME}_{uniq}.bin"  # ADD .bin extension
 
 # === Run ONE Batch of lamb (called by worker) ===
 def run_one_batch(params, cid):
