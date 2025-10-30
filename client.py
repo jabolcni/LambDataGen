@@ -69,23 +69,43 @@ def report_progress(cid, message, games=0, positions=0, output_file=None):
 
 # === Parse lamb Output ===
 def parse_lamb_output(stdout):
-    m = re.search(r"Generated (\d+) games?, (\d+) positions?", stdout)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    return 0, 0
+    try:
+        # Try multiple patterns
+        patterns = [
+            r"games=(\d+) positions=(\d+)",
+            r"Generated (\d+) games?, (\d+) positions?",
+            r"games: (\d+), positions: (\d+)"
+        ]
+        
+        for pattern in patterns:
+            m = re.search(pattern, stdout)
+            if m:
+                games = int(m.group(1))
+                positions = int(m.group(2))
+                print(f"[DEBUG] Parsed: {games} games, {positions} positions")  # Debug
+                return games, positions
+        
+        print(f"[DEBUG] No match found in output: {stdout[:200]}...")  # Debug
+        return 0, 0
+        
+    except Exception as e:
+        print(f"[DEBUG] Parse error: {e}")
+        return 0, 0
 
 # === Upload File to Server ===
 def upload_file_to_server(file_path):
     if not file_path.exists():
+        print(f"[DEBUG] Upload failed: {file_path} does not exist")
         return
     try:
+        print(f"[DEBUG] Attempting to upload {file_path}")  # ADD THIS
         with open(file_path, "rb") as f:
             files = {"file": (file_path.name, f, "application/octet-stream")}
             r = requests.post(f"{SERVER_URL}/upload", files=files, timeout=30)
             if r.status_code == 200:
                 print(f"[+] Uploaded {file_path.name}")
-                # Optional: delete after upload
-                # file_path.unlink()
+            else:
+                print(f"[!] Upload failed with status {r.status_code}")
     except Exception as e:
         print(f"[!] Upload failed: {e}")
 
