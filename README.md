@@ -38,8 +38,6 @@ Example
 python client.py --name rl_pop --concurrency 4 --server http://192.168.65.97:5001
 ```
 
-python client.py --name rl_pop --concurrency 4 --server http://192.168.65.97:5001
-
 # License
 
 MIT as always.
