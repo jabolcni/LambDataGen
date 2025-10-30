@@ -1,6 +1,6 @@
 # Lamb Distributed DataGen Runner
 
-This is code for server and client for runing datagen for Lambergar.
+This is code for server and client for running datagen for Lambergar.
 
 **Prerequisites:**
 *   Python 3.8+
