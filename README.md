@@ -1,4 +1,4 @@
-# DataGen
+# Lamb Distributed DataGen Runner
 
 This is code for server and client for runing datagen for Lambergar.
 
@@ -32,7 +32,7 @@ Purpose: To ensure the client runs continuously without needing to keep a termin
 
 ## How to run Server on WSL
 
-In Windows open powershell
+In Windows open PowerShell
 
 ```powershell
 wsl -l -v
@@ -44,6 +44,22 @@ New-NetFirewallRule -DisplayName "WSL Flask Server" -Direction Inbound -LocalPor
 netsh interface portproxy add v4tov4 listenport=5001 listenaddress=0.0.0.0 connectport=5001 connectaddress=172.29.99.188
 
 netsh interface portproxy show all
+```
+
+On WSL run
+
+```bash
+git clone https://github.com/jabolcni/LambDataGen.git
+cd LambDataGen
+sudo apt install python3.8-venv
+python3 -m venv lamb-dist
+
+# 1. Delete broken DB
+rm -f server_data/progress.db
+
+# 2. Run server
+source lamb-dist/bin/activate
+python server.py
 ```
 
 ## How to run Client
@@ -65,6 +81,30 @@ Example
 ```bash
 python client.py --name rl_otok9 --concurrency 12 --server http://192.168.65.97:5001
 ```
+
+### Auto-Restart on Crash (systemd)
+
+Create `/etc/systemd/system/lamb-client.service` on each worker:
+
+Enable & start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable lamb-client.service
+sudo systemctl start lamb-client.service
+```
+
+Now it ***auto-restarts*** on crash, reboot, or failure.
+
+## How to run web GUI
+
+Open link
+
+http://172.29.99.188:5001/set_parameters
+
+http://172.29.99.188:5001/debug_runs
+
+http://172.29.99.188:5001/debug_clients
 
 # License
 
