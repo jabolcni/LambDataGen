@@ -1,0 +1,17 @@
+CREATE TABLE clients (
+    client_id TEXT PRIMARY KEY,
+    name TEXT,
+    ip TEXT,
+    last_seen TEXT
+);
+
+CREATE TABLE runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id TEXT,
+    output_file TEXT,
+    games_completed INTEGER DEFAULT 0,
+    positions_completed INTEGER DEFAULT 0,
+    status TEXT,
+    timestamp TEXT,
+    FOREIGN KEY(client_id) REFERENCES clients(client_id)
+);
