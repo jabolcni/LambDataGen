@@ -35,6 +35,7 @@ parameters = {
     "adjudicate_draws_by_insufficient_mating_material": True
 }
 parameters_changed = True
+restart_required = False
 
 # === SQLite DB ===
 def init_db():
@@ -358,10 +359,21 @@ def register():
 
 @app.route("/parameters", methods=["GET"])
 def get_parameters():
-    global parameters_changed
+    global parameters_changed, restart_required  # ADD restart_required
+    
     changed = parameters_changed
+    should_restart = restart_required  # Check if restart is required
+    
+    # Reset flags after reading
     parameters_changed = False
-    return jsonify({"parameters": parameters, "changed": changed})
+    if restart_required:
+        restart_required = False  # Reset after clients read it
+    
+    return jsonify({
+        "parameters": parameters, 
+        "changed": changed,
+        "restart_required": should_restart  # ADD THIS
+    })
 
 @app.route("/progress", methods=["POST"])
 def progress():
@@ -430,6 +442,7 @@ def set_parameters():
         parameters["skipnoisy"] = form["skipnoisy"] == "true"
     
     parameters_changed = True
+    restart_required = True
     return index()
 
 @app.route("/upload", methods=["POST"])

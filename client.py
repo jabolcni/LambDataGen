@@ -50,7 +50,7 @@ def fetch_parameters():
         return data["parameters"], data["changed"]
     except Exception as e:
         print(f"[!] Param fetch error: {e}")
-        return None, False
+        return None, False, False
 
 # === Report Progress (with games/positions) ===
 def report_progress(cid, message, games=0, positions=0, output_file=None):
@@ -194,28 +194,43 @@ def main():
     last_params = None
 
     while True:
-        params, changed = fetch_parameters()
+        params, changed, restart_required = fetch_parameters()  # CHANGED THIS LINE
         if params is None:
             time.sleep(POLL_INTERVAL)
             continue
 
-        # Restart workers if params changed
-        if changed or last_params != params:
-            print(f"[+] Parameters changed → restarting {CONCURRENCY} workers")
-            report_progress(cid, f"restarting {CONCURRENCY} workers")
+        # Restart workers if params changed OR restart required
+        if changed or restart_required or last_params != params:  # CHANGED THIS LINE
+            if restart_required:  # CHANGED THIS LINE
+                print(f"[+] Server requested restart → restarting {CONCURRENCY} workers")
+                report_progress(cid, f"server restart → {CONCURRENCY} workers")
+            else:
+                print(f"[+] Parameters changed → restarting {CONCURRENCY} workers")
+                report_progress(cid, f"parameters changed → {CONCURRENCY} workers")
+            
             last_params = params.copy()
 
             # Kill old pool and start new
-            with multiprocessing.Pool(processes=CONCURRENCY) as pool:
-                try:
-                    pool.starmap_async(worker_task, [(params, cid)] * CONCURRENCY)
-                    pool.close()
-                    pool.join()  # Wait for all to finish (they won't — infinite)
-                except KeyboardInterrupt:
-                    pool.terminate()
-                    break
-                except Exception as e:
-                    report_progress(cid, f"pool error: {e}")
+            try:
+                # Use a simpler approach - create processes directly
+                processes = []
+                for i in range(CONCURRENCY):
+                    p = multiprocessing.Process(target=worker_task, args=(params, cid))
+                    p.daemon = True
+                    p.start()
+                    processes.append(p)
+                    print(f"[DEBUG] Started worker process {i+1}")
+                
+                # Wait a bit to see if processes start
+                time.sleep(2)
+                
+                # Check if processes are still alive
+                alive_count = sum(1 for p in processes if p.is_alive())
+                print(f"[DEBUG] {alive_count}/{CONCURRENCY} workers alive")
+                
+            except Exception as e:
+                print(f"[!] Error starting workers: {e}")
+                report_progress(cid, f"worker start error: {e}")
 
         else:
             report_progress(cid, "waiting for parameter change")
