@@ -33,18 +33,13 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 def get_client_id():
     if CLIENT_ID_FILE.exists():
         return CLIENT_ID_FILE.read_text().strip()
-    try:
-        payload = {"name": COMP_NAME}  # ← Use CLI name
-        r = requests.post(f"{SERVER_URL}/register", json=payload, timeout=5)
-        r.raise_for_status()
-        cid = r.json()["client_id"]
-        CLIENT_ID_FILE.write_text(cid)
-        print(f"[+] Registered as {COMP_NAME} → {cid}")
-        return cid
-    except Exception as e:
-        print(f"[!] Registration failed: {e}. Retrying...")
-        time.sleep(5)
-        return get_client_id()
+    
+    payload = {"name": COMP_NAME}
+    r = requests.post(f"{SERVER_URL}/register", json=payload)
+    cid = r.json()["client_id"]
+    CLIENT_ID_FILE.write_text(cid)
+    print(f"[+] Registered as {COMP_NAME} → {cid}")
+    return cid
 
 # === Fetch Parameters ===
 def fetch_parameters():

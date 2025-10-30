@@ -314,7 +314,7 @@ def register():
     clients[client_id] = {
         "name": data.get("name", "unknown"),
         "ip": request.remote_addr,
-        "last_seen": datetime.datetime.utcnow().strftime("%H:%M:%S"),
+        "last_seen": now(),
         "progress": "registered"
     }
     return jsonify({"client_id": client_id})
