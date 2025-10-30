@@ -88,37 +88,25 @@ def get_latest_runs():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Option 1: Get the run with highest game count for each client
+    # Simple approach: Get the most recent run for each client
     cursor.execute("""
         SELECT r.*, c.name, c.ip
         FROM runs r 
         JOIN clients c ON r.client_id = c.client_id
         WHERE r.id IN (
-            SELECT r2.id 
-            FROM runs r2 
-            WHERE r2.client_id = r.client_id 
-            ORDER BY r2.games_completed DESC, r2.timestamp DESC 
-            LIMIT 1
+            SELECT MAX(id) FROM runs GROUP BY client_id
         )
         ORDER BY r.timestamp DESC
     """)
     
-    # Option 2: Alternative - get most recent non-zero game count
-    # cursor.execute("""
-    #     SELECT r.*, c.name, c.ip
-    #     FROM runs r 
-    #     JOIN clients c ON r.client_id = c.client_id
-    #     WHERE r.id IN (
-    #         SELECT MAX(id) 
-    #         FROM runs 
-    #         WHERE games_completed > 0 
-    #         GROUP BY client_id
-    #     )
-    #     ORDER BY r.timestamp DESC
-    # """)
-    
     rows = cursor.fetchall()
     conn.close()
+    
+    # Debug print to console
+    print(f"[SERVER DEBUG] get_latest_runs returned {len(rows)} rows:")
+    for row in rows:
+        print(f"  - {row[7]}: {row[3]} games, {row[4]} positions, status: {row[5]}")
+    
     return [{"client_id": row[1], "name": row[7], "ip": row[8], "output_file": row[2],
              "games": row[3], "positions": row[4], "status": row[5], "timestamp": row[6]} for row in rows]
 
