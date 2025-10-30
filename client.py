@@ -62,10 +62,14 @@ def report_progress(cid, message, games=0, positions=0, output_file=None):
     }
     if output_file:
         payload["output_file"] = output_file
+    
+    print(f"[DEBUG] Reporting progress: {message}, games={games}, positions={positions}, file={output_file}")  # ADD THIS
+    
     try:
-        requests.post(f"{SERVER_URL}/progress", json=payload, timeout=5)
-    except:
-        pass  # Silent fail
+        response = requests.post(f"{SERVER_URL}/progress", json=payload, timeout=5)
+        print(f"[DEBUG] Progress report response: {response.status_code}")  # ADD THIS
+    except Exception as e:
+        print(f"[DEBUG] Progress report failed: {e}")  # ADD THIS
 
 # === Parse lamb Output ===
 def parse_lamb_output(stdout):
@@ -98,14 +102,17 @@ def upload_file_to_server(file_path):
         print(f"[DEBUG] Upload failed: {file_path} does not exist")
         return
     try:
-        print(f"[DEBUG] Attempting to upload {file_path}")  # ADD THIS
+        print(f"[DEBUG] Attempting to upload {file_path}")
         with open(file_path, "rb") as f:
             files = {"file": (file_path.name, f, "application/octet-stream")}
             r = requests.post(f"{SERVER_URL}/upload", files=files, timeout=30)
             if r.status_code == 200:
                 print(f"[+] Uploaded {file_path.name}")
+                # Optional: delete after successful upload to save space
+                # file_path.unlink()
+                # print(f"[+] Deleted local file {file_path.name}")
             else:
-                print(f"[!] Upload failed with status {r.status_code}")
+                print(f"[!] Upload failed with status {r.status_code}: {r.text}")
     except Exception as e:
         print(f"[!] Upload failed: {e}")
 
@@ -135,22 +142,38 @@ def run_one_batch(params, cid):
     if params["skipnoisy"]:
         cmd.append("skipnoisy")
 
-    print(f"[DEBUG] Running command: {' '.join(cmd)}")  # ADD THIS LINE
+    print(f"[DEBUG] Running command: {' '.join(cmd)}")
     
     report_progress(cid, f"starting → {output_file}")
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"[DEBUG] lamb stdout: {result.stdout}")  # ADD THIS LINE
-        print(f"[DEBUG] lamb stderr: {result.stderr}")  # ADD THIS LINE
+        print(f"[DEBUG] lamb stdout: {result.stdout}")
+        print(f"[DEBUG] lamb stderr: {result.stderr}")
+        
         games, positions = parse_lamb_output(result.stdout)
-        report_progress(cid, f"finished → {games} games, {positions} pos", games, positions, output_file)
-        upload_file_to_server(output_path)
+        
+        # CHECK FOR .bin EXTENSION
+        output_path_bin = output_path.with_suffix('.bin')
+        if output_path_bin.exists():
+            print(f"[DEBUG] Found .bin file: {output_path_bin}")
+            report_progress(cid, f"finished → {games} games, {positions} pos", games, positions, output_path_bin.name)
+            upload_file_to_server(output_path_bin)
+        elif output_path.exists():
+            print(f"[DEBUG] Found file without extension: {output_path}")
+            report_progress(cid, f"finished → {games} games, {positions} pos", games, positions, output_path.name)
+            upload_file_to_server(output_path)
+        else:
+            print(f"[DEBUG] No output file found. Checking directory:")
+            for f in OUTPUT_DIR.glob("*"):
+                print(f"  - {f.name}")
+            report_progress(cid, f"finished but no file → {games} games, {positions} pos", games, positions)
+                
     except subprocess.CalledProcessError as e:
         error = f"lamb failed: {e.returncode}\n{e.stderr[-200:]}"
-        print(f"[DEBUG] lamb error: {error}")  # ADD THIS LINE
+        print(f"[DEBUG] lamb error: {error}")
         report_progress(cid, error, 0, 0, output_file)
     except Exception as e:
-        print(f"[DEBUG] Exception: {e}")  # ADD THIS LINE
+        print(f"[DEBUG] Exception: {e}")
         report_progress(cid, f"error: {e}", 0, 0, output_file)
 
 # === Worker for multiprocessing ===
