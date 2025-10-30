@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lamb Distributed Runner Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+            padding: 40px 20px;
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header .subtitle {
+            font-size: 1.4em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border-left: 5px solid #667eea;
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        
+        .card h3 {
+            color: #764ba2;
+            margin: 25px 0 15px 0;
+            font-size: 1.4em;
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+        
+        .command {
+            background: #4a5568;
+            color: #90cdf4;
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            border-left: 4px solid #90cdf4;
+        }
+        
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        
+        .warning {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background: #d1edff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .toc {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .toc h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .toc ul {
+            list-style: none;
+            columns: 2;
+        }
+        
+        .toc li {
+            margin-bottom: 8px;
+        }
+        
+        .toc a {
+            color: #4a5568;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .toc a:hover {
+            color: #667eea;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 10px 5px;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .download-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .section {
+            scroll-margin-top: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .toc ul {
+                columns: 1;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐑 Lamb Distributed Runner</h1>
+            <div class="subtitle">Distributed Chess Training Data Generation System</div>
+        </div>
+
+        <div class="toc">
+            <h2>📋 Table of Contents</h2>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#quickstart">Quick Start</a></li>
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#installation">Installation</a></li>
+                <li><a href="#configuration">Configuration</a></li>
+                <li><a href="#usage">Usage</a></li>
+                <li><a href="#monitoring">Monitoring</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+                <li><a href="#api">API Reference</a></li>
+                <li><a href="#files">File Management</a></li>
+            </ul>
+        </div>
+
+        <div class="card section" id="overview">
+            <h2>📖 Overview</h2>
+            <p>Lamb Distributed Runner is a client-server system for distributed generation of chess training data using the Lambergar (executable is naed <code>lamb</code>) engine. Multiple computers work together generating chess positions and games, with centralized monitoring and control.</p>
+        </div>
+
+        <div class="card section" id="quickstart">
+            <h2>🚀 Quick Start</h2>
+            
+            <h3>1. Start the Server</h3>
+            <div class="code-block">
+python server.py
+            </div>
+            <p>Server runs on <code>http://0.0.0.0:5001</code></p>
+
+            <h3>2. Run Clients on Worker Machines</h3>
+            <div class="code-block">
+python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001
+            </div>
+
+            <h3>3. Monitor via Web GUI</h3>
+            <p>Access <code>http://SERVER_IP:5001</code> to view live status and control the system.</p>
+
+            <div class="note">
+                <strong>💡 Tip:</strong> Start with 10 games to verify setup, then increase to 100-1000 games for production runs.
+            </div>
+        </div>
+
+        <div class="card section" id="architecture">
+            <h2>🏗️ Architecture</h2>
+            
+            <h3>Server (server.py)</h3>
+            <ul>
+                <li>Flask web server with REST API and web GUI</li>
+                <li>Central coordination for multiple clients</li>
+                <li>Real-time monitoring of progress and statistics</li>
+                <li>File storage for generated .bin files</li>
+                <li>SQLite database for tracking client progress</li>
+            </ul>
+
+            <h3>Client (client.py)</h3>
+            <ul>
+                <li>Multi-process worker that runs <code>lamb datagen</code> commands</li>
+                <li>Automatic registration with the server</li>
+                <li>Progress reporting and file upload</li>
+                <li>Self-managing - automatically uses new parameters</li>
+                <li>Disk space management - cleans up old files</li>
+            </ul>
+        </div>
+
+        <div class="card section" id="installation">
+            <h2>📥 Installation</h2>
+            
+            <h3>Prerequisites</h3>
+            <ul>
+                <li>Python 3.8+</li>
+                <li><code>lamb</code> binary in the working directory</li>
+                <li>Network connectivity between clients and server</li>
+            </ul>
+
+            <h3>Server Setup</h3>
+            <div class="command">python server.py</div>
+
+            <h3>Client Setup</h3>
+            <div class="command">chmod +x ./lamb</div>
+            <div class="command">python client.py --name worker1 --concurrency 8 --server http://SERVER_IP:5001</div>
+        </div>
+
+        <div class="card section" id="configuration">
+            <h2>⚙️ Configuration</h2>
+            
+            <h3>Server Parameters (Web GUI)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Range</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>games</code></td>
+                        <td>1-∞</td>
+                        <td>Number of games to generate per batch</td>
+                    </tr>
+                    <tr>
+                        <td><code>depth</code></td>
+                        <td>0-31</td>
+                        <td>Search depth</td>
+                    </tr>
+                    <tr>
+                        <td><code>save_min_ply</code></td>
+                        <td>0-31</td>
+                        <td>Minimum ply to save positions</td>
+                    </tr>
+                    <tr>
+                        <td><code>save_max_ply</code></td>
+                        <td>0-511</td>
+                        <td>Maximum ply to save positions</td>
+                    </tr>
+                    <tr>
+                        <td><code>random_min_ply</code></td>
+                        <td>0-31</td>
+                        <td>Minimum ply for random moves</td>
+                    </tr>
+                    <tr>
+                        <td><code>random_50_ply</code></td>
+                        <td>0-31</td>
+                        <td>50% random move ply threshold</td>
+                    </tr>
+                    <tr>
+                        <td><code>random_10_ply</code></td>
+                        <td>0-255</td>
+                        <td>10% random move ply threshold</td>
+                    </tr>
+                    <tr>
+                        <td><code>random_move_count</code></td>
+                        <td>0-31</td>
+                        <td>Number of random moves</td>
+                    </tr>
+                    <tr>
+                        <td><code>skipnoisy</code></td>
+                        <td>true/false</td>
+                        <td>Skip noisy positions</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Client Command Line Options</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Option</th>
+                        <th>Default</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>--name</code></td>
+                        <td>Required</td>
+                        <td>Unique identifier for this computer</td>
+                    </tr>
+                    <tr>
+                        <td><code>--concurrency</code></td>
+                        <td>4</td>
+                        <td>Number of parallel lamb processes</td>
+                    </tr>
+                    <tr>
+                        <td><code>--server</code></td>
+                        <td>http://localhost:5000</td>
+                        <td>Server URL</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card section" id="usage">
+            <h2>🎯 Usage</h2>
+            
+            <h3>Basic Operation</h3>
+            <ol>
+                <li><strong>Start server</strong> on a central machine</li>
+                <li><strong>Run clients</strong> on worker machines</li>
+                <li><strong>Access web GUI</strong> to monitor progress</li>
+                <li><strong>Update parameters</strong> as needed via the web interface</li>
+            </ol>
+
+            <h3>Network Setup for Multiple Computers</h3>
+            <div class="code-block">
+# On server computer - find IP address
+ip addr show eth0 | grep "inet "  # Linux
+ipconfig  # Windows
+
+# On client computers
+python client.py --name worker1 --concurrency 8 --server http://192.168.1.100:5001
+            </div>
+
+            <div class="success">
+                <strong>✅ Pro Tip:</strong> Set concurrency to match the number of CPU cores for optimal performance.
+            </div>
+        </div>
+
+        <div class="card section" id="monitoring">
+            <h2>📊 Monitoring</h2>
+            
+            <h3>Web GUI Features</h3>
+            <ul>
+                <li><strong>Live Status Table:</strong> One line per client with cumulative totals</li>
+                <li><strong>Real-time Updates:</strong> Games and positions update automatically</li>
+                <li><strong>File Downloads:</strong> Direct download links for generated .bin files</li>
+                <li><strong>Statistics:</strong> Total games, positions, and active clients</li>
+                <li><strong>Parameter Control:</strong> Update settings for all clients</li>
+            </ul>
+
+            <h3>Client Console Output Example</h3>
+            <div class="code-block">
+[*] Lamb Client [worker1] starting | Concurrency: 4
+[+] Registered as worker1 → f965f39c-b9b5-46d1-a98b-253453d2723b
+[+] Starting 4 workers with 100 games
+[DEBUG] Running command: ./lamb datagen games 100 ...
+[DEBUG] Parsed from summary: 100 games, 8276 positions
+[+] Uploaded data_20251030_141748_worker1_NTMN.bin
+[+] Deleted local file data_20251030_141748_worker1_NTMN.bin (45.2MB)
+            </div>
+
+            <h3>Debug Endpoints</h3>
+            <ul>
+                <li><code>http://SERVER:5001/debug_db</code> - View raw database contents</li>
+                <li><code>http://SERVER:5001/debug_clients</code> - View client registrations</li>
+                <li><code>http://SERVER:5001/debug_runs</code> - View run history</li>
+            </ul>
+        </div>
+
+        <div class="card section" id="troubleshooting">
+            <h2>🐛 Troubleshooting</h2>
+            
+            <h3>Common Issues & Solutions</h3>
+            
+            <div class="warning">
+                <strong>❌ Problem:</strong> Client can't connect to server<br>
+                <strong>✅ Solution:</strong> Check firewall settings, verify server IP and port, ensure port forwarding
+            </div>
+            
+            <div class="warning">
+                <strong>❌ Problem:</strong> lamb binary not found<br>
+                <strong>✅ Solution:</strong> Ensure <code>./lamb</code> exists and is executable: <code>chmod +x ./lamb</code>
+            </div>
+            
+            <div class="warning">
+                <strong>❌ Problem:</strong> Multiple lamb processes accumulating<br>
+                <strong>✅ Solution:</strong> Kill all processes: <code>pkill -f lamb</code>
+            </div>
+
+            <h3>Performance Tips</h3>
+            <ul>
+                <li><strong>Concurrency:</strong> Set to number of CPU cores</li>
+                <li><strong>Games per batch:</strong> 10-100 for quick feedback, 1000+ for long runs</li>
+                <li><strong>Network:</strong> Use wired Ethernet for large file uploads</li>
+                <li><strong>Storage:</strong> Ensure server has enough disk space for .bin files</li>
+            </ul>
+
+            <h3>System Monitoring Commands</h3>
+            <div class="code-block">
+# Check lamb processes
+ps aux | grep lamb | grep -v grep
+
+# Check disk space
+df -h
+
+# Check network connections
+netstat -tulpn | grep 5001
+            </div>
+        </div>
+
+        <div class="card section" id="api">
+            <h2>🔧 API Reference</h2>
+            
+            <h3>REST Endpoints</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th>Method</th>
+                        <th>Description</th>
+                        <th>Parameters</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>/</code></td>
+                        <td>GET</td>
+                        <td>Web GUI</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td><code>/register</code></td>
+                        <td>POST</td>
+                        <td>Client registration</td>
+                        <td><code>{"name": "client_name"}</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/parameters</code></td>
+                        <td>GET</td>
+                        <td>Get current parameters</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td><code>/progress</code></td>
+                        <td>POST</td>
+                        <td>Report client progress</td>
+                        <td><code>{"client_id": "...", "progress": "...", "games": N, "positions": N}</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/upload</code></td>
+                        <td>POST</td>
+                        <td>Upload .bin files</td>
+                        <td>multipart/form-data</td>
+                    </tr>
+                    <tr>
+                        <td><code>/download/&lt;filename&gt;</code></td>
+                        <td>GET</td>
+                        <td>Download .bin files</td>
+                        <td>-</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Example API Usage</h3>
+            <div class="code-block">
+import requests
+
+# Register client
+response = requests.post("http://server:5001/register", 
+                        json={"name": "client1"})
+client_id = response.json()["client_id"]
+
+# Get parameters
+response = requests.get("http://server:5001/parameters")
+params = response.json()["parameters"]
+
+# Report progress
+requests.post("http://server:5001/progress", json={
+    "client_id": client_id,
+    "progress": "finished → 10 games, 720 pos",
+    "games": 10,
+    "positions": 720
+})
+            </div>
+        </div>
+
+        <div class="card section" id="files">
+            <h2>💾 File Management</h2>
+            
+            <h3>Generated Files</h3>
+            <ul>
+                <li><strong>Output format:</strong> <code>data_YYYYMMDD_HHMMSS_NAME_XXXX.bin</code></li>
+                <li><strong>Server storage:</strong> <code>server_data/games/</code> directory</li>
+                <li><strong>Client cleanup:</strong> Automatic when folder exceeds 4GB (keeps 2GB)</li>
+            </ul>
+
+            <h3>Database Schema</h3>
+            <div class="code-block">
+CREATE TABLE clients (
+    client_id TEXT PRIMARY KEY,
+    name TEXT,
+    ip TEXT, 
+    last_seen TEXT
+);
+
+CREATE TABLE runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id TEXT,
+    output_file TEXT,
+    games_completed INTEGER DEFAULT 0,
+    positions_completed INTEGER DEFAULT 0,
+    status TEXT,
+    timestamp TEXT,
+    FOREIGN KEY(client_id) REFERENCES clients(client_id)
+);
+            </div>
+
+            <h3>File Sizes</h3>
+            <ul>
+                <li>Typical size: 40-100MB per 100 games</li>
+                <li>Binary format compatible with lamb engine</li>
+                <li>Automatically managed to prevent disk exhaustion</li>
+            </ul>
+        </div>
+
+        <div class="card" style="text-align: center;">
+            <h2>📥 Download Documentation</h2>
+            <p>Save this page as HTML for offline reference:</p>
+            <button class="download-btn" onclick="downloadHTML()">Download HTML Documentation</button>
+            <button class="download-btn" onclick="printPage()">Print Documentation</button>
+        </div>
+    </div>
+
+    <script>
+        function downloadHTML() {
+            const htmlContent = document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'lamb-distributed-runner-documentation.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function printPage() {
+            window.print();
+        }
+
+        // Smooth scrolling for table of contents links
+        document.querySelectorAll('.toc a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
