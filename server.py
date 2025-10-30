@@ -382,5 +382,5 @@ if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
     with open("templates/gui.html", "w") as f:
         f.write(HTML_GUI)
-    print("🐑 Lamb Server → http://0.0.0.0:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    print("🐑 Lamb Server → http://0.0.0.0:5001")
+    app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)
