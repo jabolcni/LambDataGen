@@ -88,12 +88,11 @@ def get_latest_runs():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Show all recent runs with actual game counts (handle NULL values)
+    # Show all recent runs (remove the games_completed filter)
     cursor.execute("""
         SELECT r.*, c.name, c.ip
         FROM runs r 
         JOIN clients c ON r.client_id = c.client_id
-        WHERE (r.games_completed > 0 OR r.games_completed IS NOT NULL)
         ORDER BY r.timestamp DESC
         LIMIT 20
     """)
