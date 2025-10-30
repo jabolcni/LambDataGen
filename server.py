@@ -410,6 +410,16 @@ def debug_db():
     result += "</table>"
     return result
 
+@app.route("/debug_runs")
+def debug_runs():
+    runs = get_latest_runs()
+    result = "<h1>Current Runs in GUI</h1><table border=1>"
+    result += "<tr><th>Name</th><th>Games</th><th>Positions</th><th>Status</th><th>File</th></tr>"
+    for r in runs:
+        result += f"<tr><td>{r['name']}</td><td>{r['games']}</td><td>{r['positions']}</td><td>{r['status']}</td><td>{r['output_file']}</td></tr>"
+    result += "</table>"
+    return result
+
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
     with open("templates/gui.html", "w") as f:
