@@ -88,12 +88,12 @@ def get_latest_runs():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Show all recent completed runs (not grouped by client)
+    # Show all recent runs with actual game counts (handle NULL values)
     cursor.execute("""
         SELECT r.*, c.name, c.ip
         FROM runs r 
         JOIN clients c ON r.client_id = c.client_id
-        WHERE r.games_completed > 0
+        WHERE (r.games_completed > 0 OR r.games_completed IS NOT NULL)
         ORDER BY r.timestamp DESC
         LIMIT 20
     """)
@@ -406,6 +406,24 @@ def debug_db():
     for row in rows:
         result += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td></tr>"
     result += "</table>"
+    return result
+
+@app.route("/debug_db_full")
+def debug_db_full():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Check all recent runs
+    cursor.execute("SELECT * FROM runs ORDER BY timestamp DESC LIMIT 20")
+    rows = cursor.fetchall()
+    
+    result = "<h1>All Recent Runs in DB</h1><table border=1>"
+    result += "<tr><th>ID</th><th>Client ID</th><th>File</th><th>Games</th><th>Positions</th><th>Status</th><th>Timestamp</th></tr>"
+    for row in rows:
+        result += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td></tr>"
+    result += "</table>"
+    
+    conn.close()
     return result
 
 @app.route("/debug_runs")
