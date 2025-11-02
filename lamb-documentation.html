@@ -223,21 +223,27 @@
 
         <div class="card section" id="overview">
             <h2>📖 Overview</h2>
-            <p>Lamb Distributed Runner is a client-server system for distributed generation of chess training data using the Lambergar (executable is naed <code>lamb</code>) engine. Multiple computers work together generating chess positions and games, with centralized monitoring and control.</p>
+            <p>Lamb Distributed Runner is a client-server system for distributed generation of chess training data using the Lambergar (executable is named <code>lamb</code>) engine. Multiple computers work together generating chess positions and games, with centralized monitoring and control. The client can automatically download the latest engine binary from the server on startup.</p>
         </div>
 
         <div class="card section" id="quickstart">
             <h2>🚀 Quick Start</h2>
             
             <h3>1. Start the Server</h3>
+            <p>Ensure the <code>lamb</code> executable is present in the server's directory.</p>
             <div class="code-block">
 python server.py
             </div>
             <p>Server runs on <code>http://0.0.0.0:5001</code></p>
 
             <h3>2. Run Clients on Worker Machines</h3>
+            <p>The client will download the <code>lamb</code> executable from the server if it doesn't exist locally or if the <code>--fresh-registration</code> flag is used.</p>
             <div class="code-block">
 python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001
+            </div>
+            <p>Example with fresh registration and custom engine path:</p>
+            <div class="code-block">
+python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001 --fresh-registration --engine-path ./custom/lamb
             </div>
 
             <h3>3. Monitor via Web GUI</h3>
@@ -255,9 +261,10 @@ python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001
             <ul>
                 <li>Flask web server with REST API and web GUI</li>
                 <li>Central coordination for multiple clients</li>
-                <li>Real-time monitoring of progress and statistics</li>
+                <li>Real-time monitoring of progress and statistics (including positions in the last hour)</li>
                 <li>File storage for generated .bin files</li>
                 <li>SQLite database for tracking client progress</li>
+                <li>Serves the <code>lamb</code> executable binary to clients via <code>/download_engine</code></li>
             </ul>
 
             <h3>Client (client.py)</h3>
@@ -267,6 +274,8 @@ python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001
                 <li>Progress reporting and file upload</li>
                 <li>Self-managing - automatically uses new parameters</li>
                 <li>Disk space management - cleans up old files</li>
+                <li>Downloads the <code>lamb</code> engine binary from the server on startup (optionally forcing a fresh download)</li>
+                <li>Ensures the downloaded engine binary has execute permissions</li>
             </ul>
         </div>
 
@@ -276,15 +285,15 @@ python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001
             <h3>Prerequisites</h3>
             <ul>
                 <li>Python 3.8+</li>
-                <li><code>lamb</code> binary in the working directory</li>
                 <li>Network connectivity between clients and server</li>
+                <li>Linux-compatible <code>lamb</code> binary on the server machine</li>
             </ul>
 
             <h3>Server Setup</h3>
             <div class="command">python server.py</div>
 
             <h3>Client Setup</h3>
-            <div class="command">chmod +x ./lamb</div>
+            <p>No manual <code>chmod</code> required; the client handles permissions for the downloaded engine.</p>
             <div class="command">python client.py --name worker1 --concurrency 8 --server http://SERVER_IP:5001</div>
         </div>
 
@@ -374,6 +383,16 @@ python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001
                         <td>http://localhost:5000</td>
                         <td>Server URL</td>
                     </tr>
+                    <tr>
+                        <td><code>--engine-path</code></td>
+                        <td>./lamb</td>
+                        <td>Path to the lamb executable (downloaded from server if missing)</td>
+                    </tr>
+                    <tr>
+                        <td><code>--fresh-registration</code></td>
+                        <td>False</td>
+                        <td>Delete stored client ID and register as a new client on startup</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -383,8 +402,8 @@ python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001
             
             <h3>Basic Operation</h3>
             <ol>
-                <li><strong>Start server</strong> on a central machine</li>
-                <li><strong>Run clients</strong> on worker machines</li>
+                <li><strong>Start server</strong> on a central machine (ensure <code>lamb</code> binary is present)</li>
+                <li><strong>Run clients</strong> on worker machines (they will download <code>lamb</code> if needed)</li>
                 <li><strong>Access web GUI</strong> to monitor progress</li>
                 <li><strong>Update parameters</strong> as needed via the web interface</li>
             </ol>
@@ -399,6 +418,12 @@ ipconfig  # Windows
 python client.py --name worker1 --concurrency 8 --server http://192.168.1.100:5001
             </div>
 
+            <h3>Automatic Engine Updates</h3>
+            <p>Clients automatically download the <code>lamb</code> executable from the server on startup. To ensure the client always gets the latest version from the server, use the <code>--fresh-registration</code> flag:</p>
+            <div class="code-block">
+python client.py --name worker1 --concurrency 4 --server http://SERVER_IP:5001 --fresh-registration
+            </div>
+
             <div class="success">
                 <strong>✅ Pro Tip:</strong> Set concurrency to match the number of CPU cores for optimal performance.
             </div>
@@ -410,21 +435,25 @@ python client.py --name worker1 --concurrency 8 --server http://192.168.1.100:50
             <h3>Web GUI Features</h3>
             <ul>
                 <li><strong>Live Status Table:</strong> One line per client with cumulative totals</li>
-                <li><strong>Real-time Updates:</strong> Games and positions update automatically</li>
+                <li><strong>Real-time Updates:</strong> Games and positions update automatically (JavaScript-driven)</li>
                 <li><strong>File Downloads:</strong> Direct download links for generated .bin files</li>
-                <li><strong>Statistics:</strong> Total games, positions, and active clients</li>
+                <li><strong>Statistics:</strong> Total games, positions, active clients, and <strong>positions generated in the last hour</strong></li>
                 <li><strong>Parameter Control:</strong> Update settings for all clients</li>
             </ul>
 
             <h3>Client Console Output Example</h3>
             <div class="code-block">
 [*] Lamb Client [worker1] starting | Concurrency: 4
+[*] Engine Path: lamb
+[!] Engine lamb not found. Attempting to download from server...
+[+] Downloaded engine to lamb
+[DEBUG] Making lamb executable...
+[+] Set executable permissions for lamb
 [+] Registered as worker1 → f965f39c-b9b5-46d1-a98b-253453d2723b
 [+] Starting 4 workers with 100 games
-[DEBUG] Running command: ./lamb datagen games 100 ...
+[DEBUG] Running command: /absolute/path/to/lamb datagen games 100 ...
 [DEBUG] Parsed from summary: 100 games, 8276 positions
 [+] Uploaded data_20251030_141748_worker1_NTMN.bin
-[+] Deleted local file data_20251030_141748_worker1_NTMN.bin (45.2MB)
             </div>
 
             <h3>Debug Endpoints</h3>
@@ -432,6 +461,8 @@ python client.py --name worker1 --concurrency 8 --server http://192.168.1.100:50
                 <li><code>http://SERVER:5001/debug_db</code> - View raw database contents</li>
                 <li><code>http://SERVER:5001/debug_clients</code> - View client registrations</li>
                 <li><code>http://SERVER:5001/debug_runs</code> - View run history</li>
+                <li><code>http://SERVER:5001/debug_db_status</code> - View database file status</li>
+                <li><code>http://SERVER:5001/live_data</code> - View data used by the auto-refreshing GUI</li>
             </ul>
         </div>
 
@@ -446,10 +477,15 @@ python client.py --name worker1 --concurrency 8 --server http://192.168.1.100:50
             </div>
             
             <div class="warning">
-                <strong>❌ Problem:</strong> lamb binary not found<br>
-                <strong>✅ Solution:</strong> Ensure <code>./lamb</code> exists and is executable: <code>chmod +x ./lamb</code>
+                <strong>❌ Problem:</strong> Client fails to download <code>lamb</code> binary<br>
+                <strong>✅ Solution:</strong> Ensure <code>lamb</code> executable exists on the server in the same directory as <code>server.py</code> and is compatible with the client's OS.
             </div>
             
+            <div class="warning">
+                <strong>❌ Problem:</strong> Client reports "No such file or directory: 'lamb'"<br>
+                <strong>✅ Solution:</strong> The downloaded <code>lamb</code> file might be incompatible or the path resolution failed. Check client logs. Ensure the server hosts the correct Linux binary.
+            </div>
+
             <div class="warning">
                 <strong>❌ Problem:</strong> Multiple lamb processes accumulating<br>
                 <strong>✅ Solution:</strong> Kill all processes: <code>pkill -f lamb</code>
@@ -526,6 +562,18 @@ netstat -tulpn | grep 5001
                         <td>Download .bin files</td>
                         <td>-</td>
                     </tr>
+                    <tr>
+                        <td><code>/download_engine</code></td>
+                        <td>GET</td>
+                        <td>Download the lamb executable binary</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td><code>/live_data</code></td>
+                        <td>GET</td>
+                        <td>Get live stats for auto-refresh (GUI)</td>
+                        <td>-</td>
+                    </tr>
                 </tbody>
             </table>
 
@@ -549,6 +597,11 @@ requests.post("http://server:5001/progress", json={
     "games": 10,
     "positions": 720
 })
+
+# Download engine binary (example)
+response = requests.get("http://server:5001/download_engine")
+with open("lamb", "wb") as f:
+    f.write(response.content)
             </div>
         </div>
 
@@ -560,6 +613,13 @@ requests.post("http://server:5001/progress", json={
                 <li><strong>Output format:</strong> <code>data_YYYYMMDD_HHMMSS_NAME_XXXX.bin</code></li>
                 <li><strong>Server storage:</strong> <code>server_data/games/</code> directory</li>
                 <li><strong>Client cleanup:</strong> Automatic when folder exceeds 4GB (keeps 2GB)</li>
+            </ul>
+
+            <h3>Client ID Storage</h3>
+            <ul>
+                <li><strong>Location:</strong> <code>/tmp/lamb_client_id</code></li>
+                <li><strong>Usage:</strong> Stores the unique client ID for reconnection</li>
+                <li><strong>Control:</strong> Use <code>--fresh-registration</code> flag to delete and re-register.</li>
             </ul>
 
             <h3>Database Schema</h3>
