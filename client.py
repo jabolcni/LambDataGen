@@ -203,8 +203,10 @@ def run_one_batch(params, cid):
     output_file = make_output_filename()
     output_path = OUTPUT_DIR / output_file
 
+    # Use the absolute path of the LAMB_BINARY
     cmd = [
-        str(LAMB_BINARY), "datagen", # Use the Path object, convert to string
+        str(LAMB_BINARY.absolute()), # Convert Path to absolute string path
+        "datagen",
         "games", str(params["games"]),
         "depth", str(params["depth"]),
         "save_min_ply", str(params["save_min_ply"]),
@@ -250,7 +252,8 @@ def run_one_batch(params, cid):
         report_progress(cid, error, 0, 0, output_file)
     except Exception as e:
         print(f"[DEBUG] Exception: {e}")
-        report_progress(cid, f"error: {e}", 0, 0, output_file)
+        # Include the command that failed in the error report
+        report_progress(cid, f"error running command '{' '.join(cmd)}': {e}", 0, 0, output_file)
 
 # === Worker for multiprocessing ===
 def worker_task(current_params, cid):
