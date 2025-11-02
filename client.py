@@ -14,14 +14,15 @@ import re
 from pathlib import Path
 import shutil
 from pathlib import Path
+import hashlib # Import hashlib for file hashing
 
 # === CLI Arguments ===
 parser = argparse.ArgumentParser(description="Lamb Distributed Client")
 parser.add_argument("--name", required=True, help="Unique name for this computer (e.g. node01)")
 parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel lamb processes")
 parser.add_argument("--server", default="http://192.168.65.97:5000", help="Server URL")
-# Add argument for engine path (default remains "./lamb")
 parser.add_argument("--engine-path", default="./lamb", help="Path to the lamb executable (default: ./lamb)")
+# Add flag to force fresh registration
 parser.add_argument("--fresh-registration", action='store_true', help="Delete stored client ID and register as a new client on startup.")
 args = parser.parse_args()
 
@@ -31,67 +32,207 @@ COMP_NAME = args.name  # ← Used everywhere
 POLL_INTERVAL = 10
 CLIENT_ID_FILE = Path("/tmp/lamb_client_id")
 LAMB_BINARY = Path(args.engine_path) # Use the argument value
+LAMB_HASH_FILE = Path("/tmp/lamb_engine_hash.txt") # File to store the known server hash
 OUTPUT_DIR = Path("data")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# def ensure_engine_exists():
-#     """Check if the engine exists, download it from the server if not, and make it executable."""
-#     if not LAMB_BINARY.exists():
-#         print(f"[!] Engine {LAMB_BINARY} not found. Attempting to download from server...")
-#         download_engine_from_server()
-#     else:
-#         print(f"[DEBUG] Engine {LAMB_BINARY} found locally.")
-
-#     # Ensure it's executable
-#     if LAMB_BINARY.exists():
-#         print(f"[DEBUG] Making {LAMB_BINARY} executable...")
-#         try:
-#             LAMB_BINARY.chmod(0o755) # Set permissions to rwx for owner, rx for group/others
-#             print(f"[+] Set executable permissions for {LAMB_BINARY}")
-#         except Exception as e:
-#             print(f"[!] Error setting permissions for {LAMB_BINARY}: {e}")
-#             exit(1) # Exit if we can't make it executable
-#     else:
-#         print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and download failed.")
-#         exit(1)
+def calculate_file_hash(filepath):
+    """Calculate the SHA256 hash of a file."""
+    if not filepath.exists():
+        print(f"[CLIENT DEBUG] File {filepath} does not exist for hashing.")
+        return None
+    try:
+        with open(filepath, "rb") as f:
+            file_hash = hashlib.sha256()
+            for chunk in iter(lambda: f.read(4096), b""):
+                file_hash.update(chunk)
+        return file_hash.hexdigest()
+    except Exception as e:
+        print(f"[CLIENT DEBUG] Error calculating hash for {filepath}: {e}")
+        return None
 
 def ensure_engine_exists():
-    """Always download the engine from the server, overwriting the local one if it exists, and make it executable."""
-    print(f"[INFO] Initiating engine download/update from server...")
-    success = download_engine_from_server()
+    """Check the server's engine hash and update frequency, then download the engine if necessary."""
+    print(f"[INFO] Initiating engine check/update from server...")
+    params, _, _ = fetch_parameters() # Fetch parameters to get hash and frequency
 
-    if success:
-        # Ensure it's executable
+    if params is None:
+        print("[!] Warning: Could not fetch parameters from server. Attempting to use local engine if it exists.")
         if LAMB_BINARY.exists():
-            print(f"[DEBUG] Making {LAMB_BINARY} executable...")
-            try:
-                LAMB_BINARY.chmod(0o755) # Set permissions to rwx for owner, rx for group/others
-                print(f"[+] Set executable permissions for {LAMB_BINARY}")
-                print(f"[+] Engine updated successfully from server.")
-            except Exception as e:
-                print(f"[!] Error setting permissions for {LAMB_BINARY}: {e}")
-                exit(1) # Exit if we can't make it executable after download
-        else:
-            # This should ideally not happen if download_engine_from_server reported success,
-            # but good to check.
-            print(f"[!] Error: Engine download reported success, but {LAMB_BINARY} does not exist locally.")
-            exit(1)
-    else:
-        # Download failed
-        print(f"[!] Error: Failed to download engine from server.")
-        # Check if a local version exists as a fallback (optional)
-        if LAMB_BINARY.exists():
-             print(f"[WARNING] Local engine {LAMB_BINARY} exists but server download failed. Attempting to use local version.")
              try:
                  LAMB_BINARY.chmod(0o755)
                  print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+                 return # Assume local version is okay if server is unreachable
              except Exception as e:
                  print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
                  exit(1)
         else:
-            # No local version either
-            print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and server download failed.")
+            print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and server parameters fetch failed.")
             exit(1)
+
+    server_engine_hash = params.get("engine_hash")
+    update_frequency = params.get("engine_update_frequency", "always") # Default to "always"
+
+    print(f"[CLIENT DEBUG] Server engine hash: {server_engine_hash[:16] if server_engine_hash else 'None'}... | Frequency: {update_frequency}")
+
+    should_update = False
+    local_engine_exists = LAMB_BINARY.exists()
+
+    if update_frequency == "never":
+        print(f"[INFO] Engine update frequency is 'never'. Skipping update check.")
+        if local_engine_exists:
+            # Ensure it's executable if it exists
+            try:
+                LAMB_BINARY.chmod(0o755)
+                print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+            except Exception as e:
+                print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                exit(1)
+        else:
+            print(f"[!] Error: Engine update frequency is 'never' but {LAMB_BINARY} does not exist locally.")
+            exit(1)
+        return # Exit early, no update needed
+
+    if update_frequency == "always":
+        print(f"[INFO] Engine update frequency is 'always'. Checking for update.")
+        should_update = True # Always check if hash changed when frequency is 'always'
+    elif update_frequency == "once_a_day":
+        print(f"[INFO] Engine update frequency is 'once_a_day'. Checking for update.")
+        # Check if the last update was more than 24 hours ago
+        if LAMB_HASH_FILE.exists():
+            try:
+                stored_hash_time_str = LAMB_HASH_FILE.read_text().strip()
+                # Expected format: "hash|timestamp_iso"
+                parts = stored_hash_time_str.split("|", 1)
+                if len(parts) == 2:
+                    stored_hash, stored_time_str = parts
+                    stored_time = datetime.datetime.fromisoformat(stored_time_str.replace("Z", "+00:00"))
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    if now - stored_time < datetime.timedelta(days=1):
+                        print(f"[INFO] Last update check was less than a day ago. Skipping check.")
+                        # If the local file exists and the hash matches the *stored* one, we can potentially skip.
+                        if local_engine_exists:
+                            local_hash = calculate_file_hash(LAMB_BINARY)
+                            if local_hash and local_hash == stored_hash:
+                                print(f"[INFO] Local engine hash matches stored hash from less than a day ago. Assuming up-to-date.")
+                                try:
+                                    LAMB_BINARY.chmod(0o755)
+                                    print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+                                except Exception as e:
+                                    print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                                    exit(1)
+                                return # Exit early, no update needed based on stored info
+                            else:
+                                print(f"[INFO] Local engine hash differs from stored hash, or local file doesn't exist. Proceeding with check/download.")
+                        else:
+                            print(f"[INFO] Local engine file missing. Proceeding with check/download.")
+                    else:
+                        print(f"[INFO] Last update check was more than a day ago. Proceeding with check/download.")
+                        should_update = True
+                else:
+                    print(f"[WARNING] Invalid format in {LAMB_HASH_FILE}. Proceeding with check/download.")
+                    should_update = True
+            except ValueError as e:
+                print(f"[WARNING] Could not parse timestamp in {LAMB_HASH_FILE}: {e}. Proceeding with check/download.")
+                should_update = True
+            except Exception as e:
+                print(f"[WARNING] Error reading {LAMB_HASH_FILE}: {e}. Proceeding with check/download.")
+                should_update = True
+        else:
+            print(f"[INFO] No previous update timestamp found. Proceeding with check/download.")
+            should_update = True
+    else:
+        print(f"[WARNING] Unknown engine_update_frequency '{update_frequency}'. Defaulting to 'always'.")
+        should_update = True # Default to checking if unknown
+
+    # If we decide to update based on frequency rules
+    if should_update:
+        # Get the hash stored locally (if any)
+        stored_hash = None
+        if LAMB_HASH_FILE.exists():
+            stored_hash = LAMB_HASH_FILE.read_text().strip().split("|", 1)[0] # Get just the hash part
+
+        print(f"[CLIENT DEBUG] Stored hash: {stored_hash[:16] if stored_hash else 'None'}... | Server hash: {server_engine_hash[:16] if server_engine_hash else 'None'}...")
+
+        # Compare hashes if both are available
+        if server_engine_hash and stored_hash:
+            if server_engine_hash != stored_hash:
+                print(f"[INFO] Server engine hash differs from stored hash. Downloading new version.")
+                success = download_engine_from_server()
+                if success:
+                    # Update the stored hash file with the new hash and current time
+                    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    LAMB_HASH_FILE.write_text(f"{server_engine_hash}|{now_str}")
+                    print(f"[+] Updated stored engine hash file: {LAMB_HASH_FILE}")
+                else:
+                    print(f"[!] Failed to download new engine version. Keeping old version if it exists.")
+                    if local_engine_exists:
+                        try:
+                            LAMB_BINARY.chmod(0o755)
+                            print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+                        except Exception as e:
+                            print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                            exit(1)
+            else:
+                print(f"[INFO] Server engine hash matches stored hash. No update needed.")
+                if local_engine_exists:
+                    try:
+                        LAMB_BINARY.chmod(0o755)
+                        print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+                    except Exception as e:
+                        print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                        exit(1)
+                else:
+                    # This shouldn't happen if stored hash exists, but handle it
+                    print(f"[!] Error: Stored hash exists but local engine file {LAMB_BINARY} is missing.")
+                    exit(1)
+        elif server_engine_hash:
+            # No stored hash, but server has one -> download
+            print(f"[INFO] No stored hash found, but server has one. Downloading engine.")
+            success = download_engine_from_server()
+            if success:
+                # Update the stored hash file with the new hash and current time
+                now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                LAMB_HASH_FILE.write_text(f"{server_engine_hash}|{now_str}")
+                print(f"[+] Updated stored engine hash file: {LAMB_HASH_FILE}")
+            else:
+                print(f"[!] Failed to download engine.")
+                if local_engine_exists:
+                    try:
+                        LAMB_BINARY.chmod(0o755)
+                        print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+                    except Exception as e:
+                        print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                        exit(1)
+                else:
+                    print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and server download failed.")
+                    exit(1)
+        else:
+            # Server has no hash (no engine file?)
+            print(f"[WARNING] Server did not provide an engine hash. Cannot verify local engine.")
+            if local_engine_exists:
+                try:
+                    LAMB_BINARY.chmod(0o755)
+                    print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+                except Exception as e:
+                    print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                    exit(1)
+            else:
+                print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and server has no hash.")
+                exit(1)
+    else:
+        # Update frequency rules said not to update, but ensure local file exists and is executable
+        if local_engine_exists:
+            try:
+                LAMB_BINARY.chmod(0o755)
+                print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+            except Exception as e:
+                print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                exit(1)
+        else:
+            print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally.")
+            exit(1)
+
 
 def download_engine_from_server():
     """Download the lamb executable from the server."""
@@ -131,18 +272,22 @@ def get_client_id():
     print(f"[+] Registered as {COMP_NAME} → {cid}")
     return cid
 
-# === Fetch Parameters ===
+# === Fetch Parameters (Updated) ===
 def fetch_parameters():
     try:
         r = requests.get(f"{SERVER_URL}/parameters", timeout=5)
         r.raise_for_status()
         data = r.json()
-        # Return 3 values: parameters, changed, restart_required
-        return data["parameters"], data["changed"], data.get("restart_required", False)
+        # Return 4 values: parameters (including engine_hash), changed, restart_required, engine_hash
+        params = data.get("parameters", {})
+        engine_hash = data.get("engine_hash") # Extract engine hash from response
+        # Include engine_hash in the main params dict for easy access if needed elsewhere
+        # Or keep it separate. Let's keep it separate for clarity.
+        return params, data.get("changed", False), data.get("restart_required", False), engine_hash
     except Exception as e:
         print(f"[!] Param fetch error: {e}")
         # Return 3 values even on error
-        return None, False, False
+        return None, False, False, None
 
 # === Report Progress (with games/positions) ===
 def report_progress(cid, message, games=0, positions=0, output_file=None):
@@ -241,9 +386,8 @@ def run_one_batch(params, cid):
     output_file = make_output_filename()
     output_path = OUTPUT_DIR / output_file
 
-    # Use the absolute path of the LAMB_BINARY
     cmd = [
-        str(LAMB_BINARY.absolute()), # Convert Path to absolute string path
+        str(LAMB_BINARY.absolute()), # Convert Path to absolute string path (Fixed)
         "datagen",
         "games", str(params["games"]),
         "depth", str(params["depth"]),
@@ -299,7 +443,7 @@ def worker_task(current_params, cid):
     while True:
         try:
             # Get latest parameters for this batch
-            params, changed, restart_required = fetch_parameters()
+            params, changed, restart_required, _ = fetch_parameters() # Ignore engine_hash here
             if params is None:
                 # If fetch failed, use the current params
                 params = current_params
@@ -372,7 +516,7 @@ def main():
     print(f"[*] Lamb Client [{COMP_NAME}] starting | Concurrency: {CONCURRENCY}")
     print(f"[*] Engine Path: {LAMB_BINARY}")
 
-    # Handle fresh registration flag
+    # ADD: Handle fresh registration flag
     if args.fresh_registration:
         print(f"[INFO] --fresh-registration flag set. Deleting stored client ID: {CLIENT_ID_FILE}")
         if CLIENT_ID_FILE.exists():
@@ -381,16 +525,25 @@ def main():
         else:
             print(f"[INFO] No stored client ID file {CLIENT_ID_FILE} to delete.")
 
+        # Also delete the stored engine hash when fresh registration is forced
+        print(f"[INFO] --fresh-registration flag set. Deleting stored engine hash: {LAMB_HASH_FILE}")
+        if LAMB_HASH_FILE.exists():
+            LAMB_HASH_FILE.unlink() # Delete the file
+            print(f"[+] Deleted {LAMB_HASH_FILE}")
+        else:
+            print(f"[INFO] No stored engine hash file {LAMB_HASH_FILE} to delete.")
+
+
     # Ensure the engine exists and is executable before proceeding
     ensure_engine_exists()
 
-    cid = get_client_id()
+    cid = get_client_id() # This will register if the ID file was deleted or doesn't exist
     current_params = None
     pool = None
     cleanup_counter = 0
 
     while True:
-        params, changed, restart_required = fetch_parameters()
+        params, changed, restart_required, _ = fetch_parameters() # Ignore engine_hash here
         if params is None:
             time.sleep(POLL_INTERVAL)
             continue

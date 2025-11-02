@@ -6,12 +6,14 @@ import os
 import sqlite3
 from pathlib import Path
 import threading # Import threading for lock
+import hashlib # Import hashlib for file hashing
 
 app = Flask(__name__)
 
 # === Paths ===
 DB_PATH = "server_data/progress.db"
 GAMES_DIR = "server_data/games"
+LAMB_BINARY_PATH = Path("lamb") # Define the path to the lamb binary
 Path(GAMES_DIR).mkdir(parents=True, exist_ok=True)
 
 # === In-memory state ===
@@ -33,7 +35,10 @@ parameters = {
     "frc_start_pos_prob": 0.33,
     "dfrc_start_pos_prob": 0.27,
     "adjudicate_draws_by_score": True,
-    "adjudicate_draws_by_insufficient_mating_material": True
+    "adjudicate_draws_by_insufficient_mating_material": True,
+
+    # NEW: Engine update parameter
+    "engine_update_frequency": "always" # Options: "always", "once_a_day", "never"
 }
 parameters_changed = True
 restart_required = False
@@ -43,6 +48,45 @@ restart_required = False
 # Use a lock to protect access from multiple threads
 recent_progress = []
 progress_lock = threading.Lock()
+
+# === Engine Hash Caching ===
+# Cache the hash and the time it was calculated to avoid re-hashing every request
+cached_engine_hash = None
+cached_hash_time = None
+HASH_CACHE_DURATION = datetime.timedelta(minutes=5) # Cache for 5 minutes
+
+def get_engine_hash():
+    """Calculate and return the SHA256 hash of the lamb binary, with caching."""
+    global cached_engine_hash, cached_hash_time
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # Check if cache is still valid
+    if (cached_engine_hash and cached_hash_time and
+        now - cached_hash_time < HASH_CACHE_DURATION):
+        print(f"[SERVER DEBUG] Using cached engine hash.")
+        return cached_engine_hash
+
+    print(f"[SERVER DEBUG] Calculating engine hash for {LAMB_BINARY_PATH}...")
+    if not LAMB_BINARY_PATH.exists() or not LAMB_BINARY_PATH.is_file():
+        print(f"[SERVER DEBUG] Engine binary {LAMB_BINARY_PATH} not found.")
+        return None
+
+    try:
+        with open(LAMB_BINARY_PATH, "rb") as f:
+            file_hash = hashlib.sha256()
+            # Read the file in chunks to handle large binaries efficiently
+            for chunk in iter(lambda: f.read(4096), b""):
+                file_hash.update(chunk)
+        calculated_hash = file_hash.hexdigest()
+        print(f"[SERVER DEBUG] Calculated engine hash: {calculated_hash[:16]}...")
+
+        # Update the cache
+        cached_engine_hash = calculated_hash
+        cached_hash_time = now
+        return calculated_hash
+    except Exception as e:
+        print(f"[SERVER DEBUG] Error calculating engine hash: {e}")
+        return None
 
 # === SQLite DB ===
 def init_db():
@@ -156,7 +200,7 @@ def get_positions_last_hour():
 
     return total_positions_last_hour
 
-# === HTML GUI (UPDATED with auto-refresh and 4th field) ===
+# === HTML GUI (UPDATED) ===
 HTML_GUI = """
 <!doctype html>
 <html lang="en">
@@ -164,7 +208,7 @@ HTML_GUI = """
   <meta charset="UTF-8" />
   <title>Lamb Distributed Runner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css  " rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css    " rel="stylesheet" />
   <style>
     body { background: #f8f9fa; }
     .card { margin-bottom: 1.5rem; }
@@ -233,6 +277,17 @@ HTML_GUI = """
               <option value="true" {% if params.skipnoisy %}selected{% endif %}>true</option>
               <option value="false" {% if not params.skipnoisy %}selected{% endif %}>false</option>
             </select>
+          </div>
+
+          <!-- NEW: Engine Update Frequency Parameter -->
+          <div class="col-md-2">
+            <label class="form-label">engine_update_freq</label>
+            <select name="engine_update_frequency" class="form-control">
+              <option value="always" {% if params.engine_update_frequency == "always" %}selected{% endif %}>always</option>
+              <option value="once_a_day" {% if params.engine_update_frequency == "once_a_day" %}selected{% endif %}>once_a_day</option>
+              <option value="never" {% if params.engine_update_frequency == "never" %}selected{% endif %}>never</option>
+            </select>
+            <div class="form-text">How often clients should check for engine updates</div>
           </div>
 
           <!-- FUTURE PARAMETERS (GREYED OUT) -->
@@ -489,10 +544,14 @@ def get_parameters():
     if restart_required:
         restart_required = False  # Reset after clients read it
 
+    # Get the current engine hash
+    engine_hash = get_engine_hash()
+
     return jsonify({
         "parameters": parameters,
         "changed": changed,
-        "restart_required": should_restart  # ADD THIS
+        "restart_required": should_restart,
+        "engine_hash": engine_hash # Include the hash in the response
     })
 
 @app.route("/progress", methods=["POST"])
@@ -572,13 +631,19 @@ def set_parameters():
     # Update only active parameters
     active_params = {
         "games", "depth", "save_min_ply", "save_max_ply",
-        "random_min_ply", "random_50_ply", "random_10_ply", "random_move_count"
+        "random_min_ply", "random_50_ply", "random_10_ply", "random_move_count",
+        "engine_update_frequency" # Include the new parameter
     }
 
     for key in active_params:
         if key in form:
             val = form[key].strip()
-            parameters[key] = int(val)
+            if key == "engine_update_frequency":
+                 # Validate the value if needed, for now just accept the string
+                 parameters[key] = val
+            else:
+                # Assume other active params are integers
+                parameters[key] = int(val)
 
     if "skipnoisy" in form:
         parameters["skipnoisy"] = form["skipnoisy"] == "true"
@@ -697,26 +762,17 @@ def live_data():
     positions_last_hour = get_positions_last_hour() # Calculate for live data endpoint
     # Include the current parameters as well, maybe only the ones you want to display
     current_params = parameters # You might want a subset or formatted version
+    # Get the engine hash for live data endpoint too (if needed by GUI later)
+    engine_hash = get_engine_hash()
     return jsonify({
         "runs": runs,
         "total_games": total_games,
         "total_positions": total_positions,
         "positions_last_hour": positions_last_hour, # Include the new metric
         "parameters": current_params, # Include if you want to update param display too
+        "engine_hash": engine_hash, # Include hash
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() # Optional: to see the update time
     })
-
-@app.route("/download_engine")
-def download_engine():
-    """Download the lamb engine binary."""
-    # Assuming the 'lamb' binary is in the same directory as server.py
-    engine_path = Path("lamb")
-    if engine_path.exists() and engine_path.is_file():
-        print(f"[SERVER DEBUG] Serving engine binary from: {engine_path}")
-        return send_from_directory(".", engine_path.name, as_attachment=True)
-    else:
-        print(f"[SERVER DEBUG] Engine binary not found at: {engine_path}")
-        return jsonify({"error": "Engine binary not found"}), 404
 
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
