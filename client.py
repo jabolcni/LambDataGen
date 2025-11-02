@@ -22,6 +22,7 @@ parser.add_argument("--concurrency", type=int, default=4, help="Number of parall
 parser.add_argument("--server", default="http://192.168.65.97:5000", help="Server URL")
 # Add argument for engine path (default remains "./lamb")
 parser.add_argument("--engine-path", default="./lamb", help="Path to the lamb executable (default: ./lamb)")
+parser.add_argument("--fresh-registration", action='store_true', help="Delete stored client ID and register as a new client on startup.")
 args = parser.parse_args()
 
 SERVER_URL = args.server.rstrip("/")
@@ -370,6 +371,15 @@ def cleanup_old_files(folder_path="data", max_size_gb=4, min_size_gb=2):
 def main():
     print(f"[*] Lamb Client [{COMP_NAME}] starting | Concurrency: {CONCURRENCY}")
     print(f"[*] Engine Path: {LAMB_BINARY}")
+
+    # Handle fresh registration flag
+    if args.fresh_registration:
+        print(f"[INFO] --fresh-registration flag set. Deleting stored client ID: {CLIENT_ID_FILE}")
+        if CLIENT_ID_FILE.exists():
+            CLIENT_ID_FILE.unlink() # Delete the file
+            print(f"[+] Deleted {CLIENT_ID_FILE}")
+        else:
+            print(f"[INFO] No stored client ID file {CLIENT_ID_FILE} to delete.")
 
     # Ensure the engine exists and is executable before proceeding
     ensure_engine_exists()
