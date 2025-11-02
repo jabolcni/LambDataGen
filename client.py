@@ -33,27 +33,64 @@ LAMB_BINARY = Path(args.engine_path) # Use the argument value
 OUTPUT_DIR = Path("data")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# def ensure_engine_exists():
+#     """Check if the engine exists, download it from the server if not, and make it executable."""
+#     if not LAMB_BINARY.exists():
+#         print(f"[!] Engine {LAMB_BINARY} not found. Attempting to download from server...")
+#         download_engine_from_server()
+#     else:
+#         print(f"[DEBUG] Engine {LAMB_BINARY} found locally.")
+
+#     # Ensure it's executable
+#     if LAMB_BINARY.exists():
+#         print(f"[DEBUG] Making {LAMB_BINARY} executable...")
+#         try:
+#             LAMB_BINARY.chmod(0o755) # Set permissions to rwx for owner, rx for group/others
+#             print(f"[+] Set executable permissions for {LAMB_BINARY}")
+#         except Exception as e:
+#             print(f"[!] Error setting permissions for {LAMB_BINARY}: {e}")
+#             exit(1) # Exit if we can't make it executable
+#     else:
+#         print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and download failed.")
+#         exit(1)
+
 def ensure_engine_exists():
-    """Check if the engine exists, download it from the server if not, and make it executable."""
-    if not LAMB_BINARY.exists():
-        print(f"[!] Engine {LAMB_BINARY} not found. Attempting to download from server...")
-        download_engine_from_server()
-    else:
-        print(f"[DEBUG] Engine {LAMB_BINARY} found locally.")
+    """Always download the engine from the server, overwriting the local one if it exists, and make it executable."""
+    print(f"[INFO] Initiating engine download/update from server...")
+    success = download_engine_from_server()
 
-    # Ensure it's executable
-    if LAMB_BINARY.exists():
-        print(f"[DEBUG] Making {LAMB_BINARY} executable...")
-        try:
-            LAMB_BINARY.chmod(0o755) # Set permissions to rwx for owner, rx for group/others
-            print(f"[+] Set executable permissions for {LAMB_BINARY}")
-        except Exception as e:
-            print(f"[!] Error setting permissions for {LAMB_BINARY}: {e}")
-            exit(1) # Exit if we can't make it executable
+    if success:
+        # Ensure it's executable
+        if LAMB_BINARY.exists():
+            print(f"[DEBUG] Making {LAMB_BINARY} executable...")
+            try:
+                LAMB_BINARY.chmod(0o755) # Set permissions to rwx for owner, rx for group/others
+                print(f"[+] Set executable permissions for {LAMB_BINARY}")
+                print(f"[+] Engine updated successfully from server.")
+            except Exception as e:
+                print(f"[!] Error setting permissions for {LAMB_BINARY}: {e}")
+                exit(1) # Exit if we can't make it executable after download
+        else:
+            # This should ideally not happen if download_engine_from_server reported success,
+            # but good to check.
+            print(f"[!] Error: Engine download reported success, but {LAMB_BINARY} does not exist locally.")
+            exit(1)
     else:
-        print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and download failed.")
-        exit(1)
-
+        # Download failed
+        print(f"[!] Error: Failed to download engine from server.")
+        # Check if a local version exists as a fallback (optional)
+        if LAMB_BINARY.exists():
+             print(f"[WARNING] Local engine {LAMB_BINARY} exists but server download failed. Attempting to use local version.")
+             try:
+                 LAMB_BINARY.chmod(0o755)
+                 print(f"[+] Set executable permissions for local {LAMB_BINARY}")
+             except Exception as e:
+                 print(f"[!] Error setting permissions for local {LAMB_BINARY}: {e}")
+                 exit(1)
+        else:
+            # No local version either
+            print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and server download failed.")
+            exit(1)
 
 def download_engine_from_server():
     """Download the lamb executable from the server."""
