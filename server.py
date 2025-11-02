@@ -706,6 +706,18 @@ def live_data():
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() # Optional: to see the update time
     })
 
+@app.route("/download_engine")
+def download_engine():
+    """Download the lamb engine binary."""
+    # Assuming the 'lamb' binary is in the same directory as server.py
+    engine_path = Path("lamb")
+    if engine_path.exists() and engine_path.is_file():
+        print(f"[SERVER DEBUG] Serving engine binary from: {engine_path}")
+        return send_from_directory(".", engine_path.name, as_attachment=True)
+    else:
+        print(f"[SERVER DEBUG] Engine binary not found at: {engine_path}")
+        return jsonify({"error": "Engine binary not found"}), 404
+
 if __name__ == "__main__":
     os.makedirs("templates", exist_ok=True)
     with open("templates/gui.html", "w") as f:
