@@ -1,4 +1,4 @@
-# client.py
+# client.py (Corrected)
 import argparse
 import requests
 import json
@@ -54,7 +54,8 @@ def calculate_file_hash(filepath):
 def ensure_engine_exists():
     """Check the server's engine hash and update frequency, then download the engine if necessary."""
     print(f"[INFO] Initiating engine check/update from server...")
-    params, _, _ = fetch_parameters() # Fetch parameters to get hash and frequency
+    # CORRECTED: Fetch 4 values
+    params, _, _, server_engine_hash = fetch_parameters() # Fetch parameters to get hash and frequency
 
     if params is None:
         print("[!] Warning: Could not fetch parameters from server. Attempting to use local engine if it exists.")
@@ -70,7 +71,6 @@ def ensure_engine_exists():
             print(f"[!] Error: Engine {LAMB_BINARY} does not exist locally and server parameters fetch failed.")
             exit(1)
 
-    server_engine_hash = params.get("engine_hash")
     update_frequency = params.get("engine_update_frequency", "always") # Default to "always"
 
     print(f"[CLIENT DEBUG] Server engine hash: {server_engine_hash[:16] if server_engine_hash else 'None'}... | Frequency: {update_frequency}")
@@ -286,7 +286,7 @@ def fetch_parameters():
         return params, data.get("changed", False), data.get("restart_required", False), engine_hash
     except Exception as e:
         print(f"[!] Param fetch error: {e}")
-        # Return 3 values even on error
+        # Return 4 values even on error, with engine_hash as None
         return None, False, False, None
 
 # === Report Progress (with games/positions) ===
@@ -443,6 +443,7 @@ def worker_task(current_params, cid):
     while True:
         try:
             # Get latest parameters for this batch
+            # CORRECTED: Fetch 4 values
             params, changed, restart_required, _ = fetch_parameters() # Ignore engine_hash here
             if params is None:
                 # If fetch failed, use the current params
@@ -543,6 +544,7 @@ def main():
     cleanup_counter = 0
 
     while True:
+        # CORRECTED: Fetch 4 values
         params, changed, restart_required, _ = fetch_parameters() # Ignore engine_hash here
         if params is None:
             time.sleep(POLL_INTERVAL)
