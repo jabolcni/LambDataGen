@@ -13,7 +13,7 @@ app = Flask(__name__)
 # === Paths ===
 DB_PATH = "server_data/progress.db"
 GAMES_DIR = "server_data/games"
-LAMB_BINARY_PATH = Path("lamb") # Define the path to the lamb binary
+LAMB_BINARY_PATH = Path("lambergar") # Define the path to the lambergar binary
 Path(GAMES_DIR).mkdir(parents=True, exist_ok=True)
 
 # === In-memory state ===

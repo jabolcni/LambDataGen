@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description="Lamb Distributed Client")
 parser.add_argument("--name", required=True, help="Unique name for this computer (e.g. node01)")
 parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel lamb processes")
 parser.add_argument("--server", default="http://192.168.65.97:5000", help="Server URL")
-parser.add_argument("--engine-path", default="./lamb", help="Path to the lamb executable (default: ./lamb)")
+parser.add_argument("--engine-path", default="./lambergar", help="Path to the lambergar executable (default: ./lambergar)")
 # Add flag to force fresh registration
 parser.add_argument("--fresh-registration", action='store_true', help="Delete stored client ID and register as a new client on startup.")
 args = parser.parse_args()
