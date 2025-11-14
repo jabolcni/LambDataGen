@@ -250,6 +250,15 @@ def download_engine_from_server():
             f.write(response.content)
 
         print(f"[+] Downloaded engine to {LAMB_BINARY}")
+
+        # Set executable permissions
+        try:
+            LAMB_BINARY.chmod(0o755) # rwxr-xr-x
+            print(f"[+] Set executable permissions for {LAMB_BINARY}")
+        except Exception as e:
+            print(f"[!] Error setting executable permissions for {LAMB_BINARY}: {e}")
+            return False # Return False if chmod fails
+
         return True
 
     except requests.exceptions.RequestException as e:
