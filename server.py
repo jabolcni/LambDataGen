@@ -665,6 +665,13 @@ def upload():
 def download(filename):
     return send_from_directory(GAMES_DIR, filename, as_attachment=True)
 
+@app.route("/download_engine")
+def download_engine():
+    """Provides the lamb binary for download."""
+    directory = os.path.dirname(os.path.abspath(__file__))
+    print(f"[SERVER] Engine download request received. Serving from: {directory}")
+    return send_from_directory(directory, LAMB_BINARY_PATH, as_attachment=True)
+
 @app.route("/debug_db_status")
 def debug_db_status():
     import os
